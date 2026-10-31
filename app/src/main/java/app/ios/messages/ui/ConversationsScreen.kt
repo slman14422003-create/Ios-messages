@@ -291,7 +291,7 @@ fun ConversationsScreen(
                 onDismiss = { rowMenu = null },
                 preview = {
                     Box(Modifier.clip(RoundedCornerShape(16.dp)).background(p.bg)) {
-                        ConversationRow(menuConv, false, false, menuConv.threadId in muted, {}, {})
+                        ConversationRow(menuConv, false, false, menuConv.threadId in muted, sims, {}, {})
                     }
                 }
             ) {
