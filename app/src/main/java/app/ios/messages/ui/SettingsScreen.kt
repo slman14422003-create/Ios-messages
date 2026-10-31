@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -103,7 +105,7 @@ fun SettingsScreen(
     val live = remember { LiveBlur() }
     var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     val blurPx = with(androidx.compose.ui.platform.LocalDensity.current) { 22.dp.toPx() }
-    val topInset = androidx.compose.foundation.layout.WindowInsets.statusBars
+    val topInset = WindowInsets.statusBars
         .asPaddingValues().calculateTopPadding()
     Box(Modifier.fillMaxSize().background(p.groupBg)) {
         Column(
