@@ -212,3 +212,25 @@ fun BackspaceIcon(color: Color, modifier: Modifier = Modifier) {
         drawLine(color, Offset(w * 0.74f, h * 0.38f), Offset(w * 0.48f, h * 0.62f), sw, StrokeCap.Round)
     }
 }
+
+@Composable
+fun BubbleIcon(color: Color, modifier: Modifier = Modifier, dot: Boolean = false) {
+    Canvas(modifier.size(24.dp)) {
+        val w = size.width
+        val h = size.height
+        val sw = 1.7.dp.toPx()
+        val path = Path().apply {
+            moveTo(w * 0.50f, h * 0.14f)
+            cubicTo(w * 0.78f, h * 0.14f, w * 0.94f, h * 0.30f, w * 0.94f, h * 0.48f)
+            cubicTo(w * 0.94f, h * 0.66f, w * 0.78f, h * 0.80f, w * 0.52f, h * 0.80f)
+            cubicTo(w * 0.44f, h * 0.80f, w * 0.38f, h * 0.79f, w * 0.32f, h * 0.77f)
+            cubicTo(w * 0.26f, h * 0.84f, w * 0.16f, h * 0.88f, w * 0.08f, h * 0.88f)
+            cubicTo(w * 0.14f, h * 0.82f, w * 0.17f, h * 0.76f, w * 0.17f, h * 0.70f)
+            cubicTo(w * 0.09f, h * 0.64f, w * 0.06f, h * 0.56f, w * 0.06f, h * 0.48f)
+            cubicTo(w * 0.06f, h * 0.30f, w * 0.22f, h * 0.14f, w * 0.50f, h * 0.14f)
+            close()
+        }
+        drawPath(path, color, style = Stroke(sw, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        if (dot) drawCircle(color, radius = w * 0.11f, center = Offset(w * 0.84f, h * 0.16f))
+    }
+}

@@ -62,6 +62,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,7 +94,7 @@ fun Modifier.iosClickable(onClick: () -> Unit, onLongClick: (() -> Unit)? = null
     val base = LocalPalette.current.pressed
     val color by animateColorAsState(
         if (pressed) base else base.copy(alpha = 0f),
-        if (pressed) snap<Color>() else tween<Color>(260),
+        if (pressed) snap<Color>() else Motion.fade(300),
         label = "row"
     )
     this
@@ -119,7 +121,7 @@ fun Modifier.dimClickable(onClick: () -> Unit): Modifier = composed {
     val pressed by src.collectIsPressedAsState()
     val a by animateFloatAsState(
         if (pressed) 0.35f else 1f,
-        if (pressed) snap<Float>() else tween<Float>(260),
+        if (pressed) snap<Float>() else Motion.fade(300),
         label = "dim"
     )
     this
@@ -131,7 +133,7 @@ fun Modifier.pressScale(src: InteractionSource, pressedScale: Float = 0.9f): Mod
     val pressed by src.collectIsPressedAsState()
     val s by animateFloatAsState(
         if (pressed) pressedScale else 1f,
-        spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        Motion.press(),
         label = "press"
     )
     this.graphicsLayer { scaleX = s; scaleY = s }
@@ -259,7 +261,7 @@ private class MenuPosition : PopupPositionProvider {
 @Composable
 private fun MenuCard(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     val dark = isSystemInDarkTheme()
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(24.dp)
     Column(
         modifier
             .shadow(
@@ -277,10 +279,25 @@ private fun MenuCard(modifier: Modifier, content: @Composable ColumnScope.() -> 
 }
 
 @Composable
-fun IosMenu(expanded: Boolean, onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    if (!expanded) return
+fun IosMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    originX: Float = 0.5f,
+    content: @Composable ColumnScope.() -> Unit
+) {
     val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { a.animateTo(1f, spring(dampingRatio = 0.74f, stiffness = 520f)) }
+    var alive by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            alive = true
+            a.animateTo(1f, Motion.menuIn())
+        } else if (alive) {
+            a.animateTo(0f, Motion.menuOut())
+            alive = false
+        }
+    }
+    if (!alive) return
+    val ox = if (rtlSign() < 0f) 1f - originX else originX
     Popup(
         popupPositionProvider = remember { MenuPosition() },
         onDismissRequest = onDismissRequest,
@@ -289,11 +306,11 @@ fun IosMenu(expanded: Boolean, onDismissRequest: () -> Unit, content: @Composabl
         Box(Modifier.padding(20.dp)) {
             MenuCard(
                 Modifier.graphicsLayer {
-                    val s = 0.78f + 0.22f * a.value
+                    val s = 0.55f + 0.45f * a.value
                     scaleX = s
                     scaleY = s
-                    alpha = a.value.coerceIn(0f, 1f)
-                    transformOrigin = TransformOrigin(0.5f, 0f)
+                    alpha = (a.value * 2.2f).coerceIn(0f, 1f)
+                    transformOrigin = TransformOrigin(ox, 0f)
                 },
                 content
             )
@@ -320,7 +337,7 @@ fun ContextOverlay(
     menu: @Composable ColumnScope.() -> Unit
 ) {
     val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { a.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 420f)) }
+    LaunchedEffect(Unit) { a.animateTo(1f, Motion.menuIn()) }
     Popup(
         popupPositionProvider = ZeroPosition,
         onDismissRequest = onDismiss,
@@ -437,3 +454,54 @@ fun IosMenuItem(
 
 @Composable
 fun rtlSign(): Float = if (androidx.compose.ui.platform.LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
+
+/** iPhone-style menu row: checkmark column, optional icon, label. No hairlines between rows. */
+@Composable
+fun IosMenuRow(
+    checked: Boolean = false,
+    icon: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit,
+    label: @Composable () -> Unit
+) {
+    val p = LocalPalette.current
+    Row(
+        Modifier.fillMaxWidth().iosClickable(onClick).heightIn(min = 46.dp).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterStart) {
+            if (checked) CheckMark(p.label, Modifier.size(15.dp))
+        }
+        if (icon != null) {
+            Box(Modifier.width(34.dp), contentAlignment = Alignment.CenterStart) { icon() }
+        }
+        CompositionLocalProvider(LocalContentColor provides p.label) {
+            ProvideTextStyle(TextStyle(fontSize = 17.sp)) {
+                Box(Modifier.weight(1f)) { label() }
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+    }
+}
+
+@Composable
+fun IosMenuHeader(text: String) {
+    val p = LocalPalette.current
+    Text(
+        text,
+        color = p.secondary,
+        fontSize = 15.sp,
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+fun IosMenuDivider() {
+    val dark = isSystemInDarkTheme()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .height(1.dp)
+            .background(if (dark) Color(0x33FFFFFF) else Color(0x1F000000))
+    )
+}

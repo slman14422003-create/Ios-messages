@@ -260,7 +260,7 @@ private fun ChatScreenBody(
     LaunchedEffect(rev.isNotEmpty()) { if (rev.isNotEmpty()) listReady = true }
     val listAlpha by animateFloatAsState(
         if (rev.isEmpty()) 0f else 1f,
-        tween(240),
+        Motion.fade(240),
         label = "list"
     )
 
@@ -296,7 +296,7 @@ private fun ChatScreenBody(
                         onDeleteMessage,
                         { reveal.value },
                         { viewing = it },
-                        if (listReady) Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f)) else Modifier
+                        if (listReady) Modifier.animateItemPlacement(Motion.layout()) else Modifier
                     )
                     is ChatItem.Status -> Column(
                         Modifier.fillMaxWidth().padding(top = 3.dp, end = 16.dp),
@@ -655,7 +655,7 @@ private fun BubbleRow(
     val timeLabel = remember(b.m.date) { DateFmt.time(b.m.date) }
     val appear = remember { Animatable(if (System.currentTimeMillis() - b.m.date < 4000L) 0f else 1f) }
     LaunchedEffect(Unit) {
-        if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f))
+        if (appear.value < 1f) appear.animateTo(1f, Motion.bubble())
     }
     val bdir = rtlSign()
     val shiftPx = with(LocalDensity.current) { 56.dp.toPx() }
@@ -672,11 +672,11 @@ private fun BubbleRow(
                 Modifier
                     .graphicsLayer {
                         val v = appear.value
-                        val s = 0.6f + 0.4f * v
+                        val s = 0.72f + 0.28f * v
                         scaleX = s
                         scaleY = s
                         alpha = v.coerceIn(0f, 1f)
-                        translationY = (1f - v) * 14.dp.toPx()
+                        translationY = (1f - v) * 22.dp.toPx()
                         transformOrigin = TransformOrigin(if (mine == (bdir > 0f)) 1f else 0f, 1f)
                     }
                     .onGloballyPositioned { boundsRef[0] = it.boundsInWindow() }
@@ -812,8 +812,8 @@ private fun InputBar(
     ) {
         AnimatedVisibility(
             visible = attach != null,
-            enter = fadeIn() + scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f)),
-            exit = fadeOut() + scaleOut(targetScale = 0.8f)
+            enter = fadeIn(Motion.fade(160)) + scaleIn(initialScale = 0.8f, animationSpec = Motion.pop()),
+            exit = fadeOut(Motion.fade(120)) + scaleOut(Motion.fade(140), targetScale = 0.8f)
         ) {
             val bmp = if (attach != null) rememberMmsImage(attach, 400) else null
             Box(Modifier.padding(start = 66.dp, top = 14.dp, bottom = 2.dp)) {
@@ -868,7 +868,7 @@ private fun InputBar(
                     .heightIn(min = 44.dp)
                     .shadow(10.dp, pill, clip = false, ambientColor = Color.Black.copy(alpha = 0.28f), spotColor = Color.Black.copy(alpha = 0.28f))
                     .clip(pill)
-                    .animateContentSize(spring(dampingRatio = 0.85f, stiffness = 500f))
+                    .animateContentSize(Motion.layout())
                     .background(p.cell)
                     .border(Dp.Hairline, p.outline, pill)
             ) {
@@ -896,8 +896,8 @@ private fun InputBar(
                             }
                             AnimatedVisibility(
                                 visible = true,
-                                enter = fadeIn() + scaleIn(initialScale = 0.6f, animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)),
-                                exit = fadeOut() + scaleOut(targetScale = 0.6f)
+                                enter = fadeIn() + scaleIn(initialScale = 0.5f, animationSpec = Motion.pop()),
+                                exit = fadeOut(Motion.fade(120)) + scaleOut(Motion.fade(140), targetScale = 0.6f)
                             ) {
                                 Box(
                                     Modifier
@@ -920,8 +920,8 @@ private fun InputBar(
                             }
                             AnimatedVisibility(
                                 visible = canSend,
-                                enter = fadeIn() + scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)),
-                                exit = fadeOut() + scaleOut(targetScale = 0.5f)
+                                enter = fadeIn() + scaleIn(initialScale = 0.5f, animationSpec = Motion.pop()),
+                                exit = fadeOut(Motion.fade(120)) + scaleOut(Motion.fade(140), targetScale = 0.5f)
                             ) {
                                 val src = remember { MutableInteractionSource() }
                                 Box(
@@ -942,8 +942,8 @@ private fun InputBar(
         }
         AnimatedVisibility(
             visible = emojiOpen,
-            enter = expandVertically(spring(dampingRatio = 0.9f, stiffness = 500f)) + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            enter = expandVertically(Motion.layout()) + fadeIn(Motion.fade(200)),
+            exit = shrinkVertically(Motion.layout()) + fadeOut(Motion.fade(150))
         ) {
             EmojiPanel(onPick = onEmoji, onBackspace = onBackspace)
         }

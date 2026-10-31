@@ -1,5 +1,6 @@
 package app.ios.messages
 
+import app.ios.messages.ui.Motion
 import android.Manifest
 import android.app.role.RoleManager
 import android.content.Intent
@@ -196,7 +197,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         }
         progress.animateTo(
             if (chat != null) 1f else 0f,
-            spring(dampingRatio = 1f, stiffness = 260f)
+            Motion.push()
         )
         if (chat == null) vm.clearMessages()
     }
@@ -206,7 +207,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     LaunchedEffect(settingsOpen) {
         settingsProgress.animateTo(
             if (settingsOpen) 1f else 0f,
-            spring(dampingRatio = 1f, stiffness = 260f)
+            Motion.push()
         )
     }
     val settingsVisible by remember { derivedStateOf { settingsProgress.value > 0.001f } }

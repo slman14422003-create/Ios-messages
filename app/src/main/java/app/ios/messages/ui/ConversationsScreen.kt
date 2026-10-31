@@ -100,6 +100,7 @@ fun ConversationsScreen(
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<Long>()) }
     var editMenu by remember { mutableStateOf(false) }
+    var filterMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf<Long?>(null) }
     val thud = rememberThud()
     val tick = rememberTick()
@@ -229,7 +230,7 @@ fun ConversationsScreen(
                 )
                 SwipeToDismissBox(
                     state = state,
-                    modifier = Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f)),
+                    modifier = Modifier.animateItemPlacement(Motion.layout()),
                     enableDismissFromStartToEnd = !selecting,
                     enableDismissFromEndToStart = !selecting,
                     backgroundContent = {
@@ -362,37 +363,11 @@ fun ConversationsScreen(
                             .dimClickable { if (selecting) endSelecting() else editMenu = true }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     )
-                    IosMenu(expanded = editMenu, onDismissRequest = { editMenu = false }) {
+                    IosMenu(expanded = editMenu, onDismissRequest = { editMenu = false }, originX = 0.1f) {
                         IosMenuItem(
                             text = { Text(stringResource(R.string.select_messages)) },
                             onClick = { editMenu = false; selecting = true; selected = emptySet() }
                         )
-                        Text(
-                            stringResource(R.string.filter_by),
-                            color = p.secondary,
-                            fontSize = 15.sp,
-                            modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 4.dp)
-                        )
-                        listOf(stringResource(R.string.all_messages), stringResource(R.string.unread_messages), stringResource(R.string.unknown_senders)).forEachIndexed { i, label ->
-                            IosMenuItem(
-                                text = { Text(label) },
-                                onClick = { filterIdx = i; editMenu = false },
-                                trailingIcon = { if (filterIdx == i) CheckMark(p.blue, Modifier.size(16.dp)) }
-                            )
-                        }
-                        if (sims.size > 1) sims.forEach { sm ->
-                            IosMenuItem(
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        SimBadge(sm.label, 22.dp)
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(sm.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                },
-                                onClick = { simFilter = sm.subId; filterIdx = 3; editMenu = false },
-                                trailingIcon = { if (filterIdx == 3 && simFilter == sm.subId) CheckMark(p.blue, Modifier.size(16.dp)) }
-                            )
-                        }
                     }
                 }
                 Text(
@@ -407,11 +382,44 @@ fun ConversationsScreen(
                         Modifier.align(Alignment.CenterEnd),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            Modifier
-                                .dimClickable(onSettings)
-                                .padding(horizontal = 10.dp, vertical = 10.dp)
-                        ) { GearIcon(p.blue) }
+                        Box {
+                            Box(
+                                Modifier
+                                    .dimClickable { filterMenu = true }
+                                    .padding(horizontal = 10.dp, vertical = 10.dp)
+                            ) { GearIcon(p.blue) }
+                            IosMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, originX = 0.9f) {
+                                IosMenuRow(
+                                    checked = filterIdx == 0,
+                                    icon = { BubbleIcon(p.label) },
+                                    onClick = { filterIdx = 0; filterMenu = false }
+                                ) { Text(stringResource(R.string.messages)) }
+                                IosMenuDivider()
+                                IosMenuHeader(stringResource(R.string.filter_by))
+                                IosMenuRow(
+                                    checked = filterIdx == 1,
+                                    icon = { BubbleIcon(p.label, dot = true) },
+                                    onClick = { filterIdx = 1; filterMenu = false }
+                                ) { Text(stringResource(R.string.unread_messages)) }
+                                IosMenuRow(
+                                    checked = filterIdx == 2,
+                                    icon = { SimBadge("?", 22.dp) },
+                                    onClick = { filterIdx = 2; filterMenu = false }
+                                ) { Text(stringResource(R.string.unknown_senders)) }
+                                if (sims.size > 1) sims.forEach { sm ->
+                                    IosMenuRow(
+                                        checked = filterIdx == 3 && simFilter == sm.subId,
+                                        icon = { SimBadge(sm.label, 22.dp) },
+                                        onClick = { simFilter = sm.subId; filterIdx = 3; filterMenu = false }
+                                    ) { Text(sm.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                }
+                                IosMenuDivider()
+                                IosMenuRow(
+                                    icon = { GearIcon(p.label, Modifier.size(22.dp)) },
+                                    onClick = { filterMenu = false; onSettings() }
+                                ) { Text(stringResource(R.string.settings)) }
+                            }
+                        }
                         Box(
                             Modifier
                                 .dimClickable(onCompose)

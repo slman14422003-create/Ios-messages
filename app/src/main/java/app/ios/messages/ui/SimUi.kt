@@ -72,7 +72,7 @@ fun SimSwitch(
         sims.forEach { s ->
             val on = s.subId == selected
             val c = Color(s.color)
-            val bg by animateColorAsState(if (on) c else c.copy(alpha = 0.28f), spring(dampingRatio = 0.8f, stiffness = 380f), label = "sim")
+            val bg by animateColorAsState(if (on) c else c.copy(alpha = 0.28f), Motion.fade(220), label = "sim")
             val src = remember { MutableInteractionSource() }
             Row(
                 Modifier

@@ -299,10 +299,10 @@ private fun SettingRow(
 @Composable
 private fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
-    val track by animateColorAsState(if (checked) SentBubble else p.received, label = "track")
+    val track by animateColorAsState(if (checked) SentBubble else p.received, Motion.fade(250), label = "track")
     val x by animateDpAsState(
         if (checked) 20.dp else 0.dp,
-        spring(dampingRatio = 0.62f, stiffness = 520f),
+        Motion.knob(),
         label = "knob"
     )
     Box(
