@@ -55,16 +55,22 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         job?.cancel()
         job = viewModelScope.launch(Dispatchers.IO) {
             if (debounce) delay(250)
-            _hasPermission.value = repo.canRead()
-            _isDefault.value = repo.isDefault()
-            val list = repo.conversations()
-            ensureActive()
-            _conversations.value = list
-            openThread?.let { tid ->
-                val m = repo.messages(tid)
+            try {
+                _hasPermission.value = repo.canRead()
+                _isDefault.value = repo.isDefault()
+                val list = repo.conversations()
                 ensureActive()
-                _messages.value = m
-                if (m.any { !it.mine && !it.read }) repo.markRead(tid)
+                _conversations.value = list
+                openThread?.let { tid ->
+                    val m = repo.messages(tid)
+                    ensureActive()
+                    _messages.value = m
+                    if (m.any { !it.mine && !it.read }) repo.markRead(tid)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("Messages", "refresh failed", e)
             }
         }
     }

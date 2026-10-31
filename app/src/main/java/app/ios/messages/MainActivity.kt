@@ -17,6 +17,19 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +63,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val crashFile = java.io.File(filesDir, "crash.txt")
+        if (crashFile.exists()) {
+            val trace = runCatching { crashFile.readText() }.getOrDefault("")
+            setContent {
+                CrashScreen(
+                    trace = trace,
+                    onContinue = { crashFile.delete(); recreate() }
+                )
+            }
+            return
+        }
         if (savedInstanceState == null) pendingAddress = addressFrom(intent)
         setContent {
             IMessageTheme {
@@ -175,6 +199,23 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                     )
                 }
             }
+        }
+    }
+}
+
+
+@Composable
+private fun CrashScreen(trace: String, onContinue: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    MaterialTheme {
+        Column(Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(16.dp)) {
+            Text("The app crashed last time", fontSize = 20.sp, color = Color.Black)
+            Text("Copy this text and send it to Claude:", fontSize = 14.sp, color = Color.DarkGray)
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                SelectionContainer { Text(trace, fontSize = 10.sp, color = Color.Black) }
+            }
+            Button(onClick = { clipboard.setText(AnnotatedString(trace)) }) { Text("Copy") }
+            Button(onClick = onContinue) { Text("Try opening the app") }
         }
     }
 }
