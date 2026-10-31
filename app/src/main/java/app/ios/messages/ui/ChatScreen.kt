@@ -211,6 +211,7 @@ private fun ChatScreenBody(
     val density = LocalDensity.current
     val address = target.address.orEmpty()
     var menu by remember { mutableStateOf(false) }
+    var simMenu by remember { mutableStateOf(false) }
     val name = target.name ?: target.address ?: ""
     var text by rememberSaveable(address) { mutableStateOf(initialDraft) }
     var picked by remember(address) { mutableStateOf<Int?>(null) }
@@ -237,7 +238,7 @@ private fun ChatScreenBody(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val barH = 108.dp
+    val barH = 112.dp
     val tick = rememberTick()
     val scope = rememberCoroutineScope()
     val rdir = rtlSign()
@@ -340,8 +341,8 @@ private fun ChatScreenBody(
                 .fillMaxWidth()
                 .background(
                     Brush.verticalGradient(
-                        0f to p.bg.copy(alpha = 0.97f),
-                        0.82f to p.bg.copy(alpha = 0.95f),
+                        0f to p.bg,
+                        0.9f to p.bg.copy(alpha = 0.98f),
                         1f to p.bg.copy(alpha = 0f)
                     )
                 )
@@ -351,7 +352,7 @@ private fun ChatScreenBody(
                 Box(Modifier.fillMaxWidth().height(barH)) {
                     GlassCircle(
                         44.dp,
-                        Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
+                        Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 8.dp),
                         onClick = onBack
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
                     Box(Modifier.align(Alignment.BottomCenter)) {
@@ -389,7 +390,7 @@ private fun ChatScreenBody(
                         }
                     }
                     Column(
-                        Modifier.align(Alignment.Center).plainClickable { menu = true },
+                        Modifier.align(Alignment.TopCenter).padding(top = 6.dp).plainClickable { menu = true },
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Avatar(name, 52.dp)
@@ -407,11 +408,17 @@ private fun ChatScreenBody(
                             Spacer(Modifier.width(3.dp))
                             ChevronRight(p.secondary, width = 5, height = 9, stroke = 1.4f)
                         }
-                        val headerSim = sims.firstOrNull { s -> s.subId == messages.lastOrNull { !it.mine && it.subId >= 0 }?.subId }
-                            ?: sims.firstOrNull { it.subId == simSel }
-                        if (headerSim != null) {
-                            Spacer(Modifier.height(1.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                    }
+                    val headerSim = sims.firstOrNull { it.subId == simSel }
+                    if (headerSim != null) {
+                        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)) {
+                            Row(
+                                Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .plainClickable { if (sims.size > 1) simMenu = true }
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 val dotC by animateColorAsState(Color(headerSim.color), label = "dot")
                                 Box(Modifier.size(6.dp).clip(CircleShape).background(dotC))
                                 Spacer(Modifier.width(4.dp))
@@ -423,6 +430,25 @@ private fun ChatScreenBody(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.widthIn(max = 160.dp)
                                 )
+                                if (sims.size > 1) {
+                                    Spacer(Modifier.width(3.dp))
+                                    ChevronRight(p.secondary, width = 5, height = 8, stroke = 1.2f, modifier = Modifier.graphicsLayer { rotationZ = 90f })
+                                }
+                            }
+                            IosMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
+                                sims.forEach { sm ->
+                                    IosMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                SimBadge(sm.label, 22.dp)
+                                                Spacer(Modifier.width(12.dp))
+                                                Text(sm.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                        },
+                                        onClick = { simMenu = false; picked = sm.subId; onPickSim(sm.subId) },
+                                        trailingIcon = { if (sm.subId == simSel) CheckMark(p.label, Modifier.size(16.dp)) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -792,20 +818,10 @@ private fun InputBar(
                 ) { Text("\u00D7", color = Color.White, fontSize = 15.sp) }
             }
         }
-        AnimatedVisibility(
-            visible = sims.size > 1,
-            enter = fadeIn() + scaleIn(initialScale = 0.85f, animationSpec = spring(dampingRatio = 0.7f, stiffness = 420f)),
-            exit = fadeOut() + scaleOut(targetScale = 0.85f)
-        ) {
-            SimSwitch(
-                sims, simSel, onSim,
-                Modifier.padding(start = 58.dp, top = if (attach != null) 4.dp else 12.dp)
-            )
-        }
         Row(
             Modifier.padding(
                 start = 12.dp, end = 12.dp,
-                top = if (attach != null || sims.size > 1) 6.dp else 14.dp, bottom = 8.dp
+                top = if (attach != null) 6.dp else 14.dp, bottom = 8.dp
             ),
             verticalAlignment = Alignment.Bottom
         ) {
