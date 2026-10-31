@@ -126,4 +126,8 @@
     <string name="backup_failed">The backup file could not be processed</string>
     <string name="backup_need_default">Set Messages as default to restore</string>
     <string name="filter_by">Filter By</string>
+    <string name="appearance">Appearance</string>
+    <string name="appearance_auto">Automatic</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_dark">Dark</string>
 </resources>

@@ -126,4 +126,8 @@
     <string name="backup_failed">تعذّر معالجة ملف النسخة الاحتياطية</string>
     <string name="backup_need_default">اجعل الرسائل التطبيق الافتراضي لاستعادة المحادثات</string>
     <string name="filter_by">تصفية حسب</string>
+    <string name="appearance">المظهر</string>
+    <string name="appearance_auto">تلقائي</string>
+    <string name="appearance_light">نهاري</string>
+    <string name="appearance_dark">ليلي</string>
 </resources>
