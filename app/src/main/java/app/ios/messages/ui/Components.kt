@@ -1,5 +1,8 @@
 package app.ios.messages.ui
 
+import androidx.compose.ui.res.stringResource
+import app.ios.messages.R
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState

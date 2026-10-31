@@ -1,5 +1,8 @@
 package app.ios.messages.ui
 
+import androidx.compose.ui.res.stringResource
+import app.ios.messages.R
+
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background

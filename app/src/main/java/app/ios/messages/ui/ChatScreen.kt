@@ -1,5 +1,8 @@
 package app.ios.messages.ui
 
+import androidx.compose.ui.res.stringResource
+import app.ios.messages.R
+
 import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract

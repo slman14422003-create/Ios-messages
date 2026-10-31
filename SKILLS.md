@@ -95,3 +95,7 @@
 
 ### Remaining roadmap
 1 spam filter + unknown senders section + report/block, 2 scheduled messages with SIM choice, 4 location sticker, 9 business message tabs (Transactions, Offers)
+
+### Build fix (after first CI run)
+- Cause: ui/*.kt were missing the imports androidx.compose.ui.res.stringResource and app.ios.messages.R (import insertion regex had not matched the first line of each file). Imports added to SimUi, NewMessageScreen, ChatScreen, SettingsScreen, Components, ConversationsScreen. All other CI errors (Text overload ambiguity, append ambiguity) were follow-ups of the same cause.
+- Lesson: when adding stringResource to a file, always verify both imports exist.

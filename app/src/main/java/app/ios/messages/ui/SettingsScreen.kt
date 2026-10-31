@@ -1,5 +1,8 @@
 package app.ios.messages.ui
 
+import androidx.compose.ui.res.stringResource
+import app.ios.messages.R
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
