@@ -69,7 +69,10 @@ import app.ios.messages.ui.IosBlue
 import app.ios.messages.ui.NewMessageScreen
 import app.ios.messages.ui.SentBubble
 import app.ios.messages.ui.SettingsScreen
+import app.ios.messages.ui.SetupScreen
 import app.ios.messages.ui.plainClickable
+import app.ios.messages.ui.rtlSign
+import app.ios.messages.data.Prefs
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -98,7 +101,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val blue by vm.bubbleBlue.collectAsStateWithLifecycle()
             IMessageTheme(sent = if (blue) IosBlue else SentBubble) {
-                App(vm, pendingAddress) { pendingAddress = null }
+                App(vm, pendingAddress, onLanguage = { Prefs(this).language = it; recreate() }) { pendingAddress = null }
             }
         }
     }
@@ -108,8 +111,13 @@ class MainActivity : ComponentActivity() {
         addressFrom(intent)?.let { pendingAddress = it }
     }
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(Lang.wrap(newBase))
+    }
+
     override fun onResume() {
         super.onResume()
+        vm.recheckRole()
         vm.refresh()
     }
 
@@ -125,12 +133,28 @@ private fun requiredPermissions(): Array<String> = buildList {
     add(Manifest.permission.SEND_SMS)
     add(Manifest.permission.RECEIVE_SMS)
     add(Manifest.permission.READ_CONTACTS)
+    add(Manifest.permission.READ_PHONE_STATE)
     if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
 }.toTypedArray()
 
 @Composable
-private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -> Unit) {
+private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (String) -> Unit, onConsumed: () -> Unit) {
     val ctx = LocalContext.current
+    val language = remember { Prefs(ctx).language }
+    val dir = rtlSign()
+    var backupDialog by remember { mutableStateOf(false) }
+    var backupPw by remember { mutableStateOf<String?>(null) }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    val createLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val pw = backupPw
+        backupPw = null
+        if (uri != null && pw != null) vm.exportBackup(uri, pw)
+    }
+    val openLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) restoreUri = uri
+    }
     val conversations by vm.conversations.collectAsStateWithLifecycle()
     val messages by vm.messages.collectAsStateWithLifecycle()
     val isDefault by vm.isDefault.collectAsStateWithLifecycle()
@@ -141,6 +165,16 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
     val notifications by vm.notifications.collectAsStateWithLifecycle()
     val previews by vm.previews.collectAsStateWithLifecycle()
+    val notifSound by vm.notifSound.collectAsStateWithLifecycle()
+    val notifVibrate by vm.notifVibrate.collectAsStateWithLifecycle()
+    val notifHeadsUp by vm.notifHeadsUp.collectAsStateWithLifecycle()
+    val notifLockScreen by vm.notifLockScreen.collectAsStateWithLifecycle()
+    val notifQuickReply by vm.notifQuickReply.collectAsStateWithLifecycle()
+    val notifCopyCode by vm.notifCopyCode.collectAsStateWithLifecycle()
+    val notifGroup by vm.notifGroup.collectAsStateWithLifecycle()
+    val sims by vm.sims.collectAsStateWithLifecycle()
+    val defaultSub by vm.defaultSub.collectAsStateWithLifecycle()
+    val setupDismissed by vm.setupDismissed.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
     var chat by rememberSaveable { mutableStateOf<ChatTarget?>(null) }
@@ -182,8 +216,9 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     ) { vm.onPermissionsChanged() }
     val roleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { vm.refresh() }
+    ) { vm.recheckRole() }
 
+    LaunchedEffect(isDefault, hasPermission) { if (isDefault && hasPermission) vm.dismissSetup() }
     LaunchedEffect(Unit) { permLauncher.launch(requiredPermissions()) }
     LaunchedEffect(pendingAddress) {
         pendingAddress?.let {
@@ -199,14 +234,14 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     BackHandler(enabled = settingsOpen) { settingsOpen = false }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -maxOf(progress.value, settingsProgress.value) * size.width * 0.3f }) {
+        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -maxOf(progress.value, settingsProgress.value) * size.width * 0.3f * dir }) {
             ConversationsScreen(
                 conversations = conversations,
                 pinned = pinned,
                 muted = muted,
                 isDefault = isDefault,
                 hasPermission = hasPermission,
-                onOpen = { c -> chat = ChatTarget(c.threadId, c.address, c.name) },
+                onOpen = { c -> chat = ChatTarget(if (c.threadId < 0) null else c.threadId, c.address, c.name) },
                 onCompose = { chat = ChatTarget(null, null, null) },
                 onSettings = { settingsOpen = true },
                 onDelete = { vm.deleteThreads(it) },
@@ -234,14 +269,14 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                 LaunchedEffect(t) {
                     if (t.address != null || t.threadId != null) vm.openChat(t.threadId, t.address)
                 }
-                Box(Modifier.fillMaxSize().graphicsLayer { translationX = (1f - progress.value) * size.width }) {
+                Box(Modifier.fillMaxSize().graphicsLayer { translationX = (1f - progress.value) * size.width * dir }) {
                     Box(
                         Modifier
                             .align(Alignment.CenterStart)
                             .offset(x = (-14).dp)
                             .fillMaxHeight()
                             .width(14.dp)
-                            .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.14f))))
+                            .background(Brush.horizontalGradient(if (dir > 0f) listOf(Color.Transparent, Color.Black.copy(alpha = 0.14f)) else listOf(Color.Black.copy(alpha = 0.14f), Color.Transparent)))
                     )
                     if (t.address == null) {
                         NewMessageScreen(
@@ -257,16 +292,22 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                             target = t,
                             messages = messages,
                             isDefault = isDefault,
+                            sims = sims,
+                            initialSim = vm.chooseSim(t.address.orEmpty()),
+                            initialDraft = remember(t.address) { vm.draftFor(t.address.orEmpty()) },
                             onBack = {
                                 chat = null
                                 vm.closeChat()
                             },
-                            onSend = { addr, body, att ->
-                                vm.send(addr, body, att) { tid ->
+                            onSend = { addr, body, att, sub ->
+                                vm.send(addr, body, att, sub) { tid ->
                                     chat = ChatTarget(tid, addr, vm.nameFor(addr))
                                 }
                             },
-                            onDeleteMessage = vm::deleteMessage
+                            onDeleteMessage = vm::deleteMessage,
+                            onPickSim = { sub -> vm.pickSim(t.address.orEmpty(), sub) },
+                            onDraft = { d -> vm.saveDraft(t.address.orEmpty(), d) },
+                            onRetry = { m, sub -> vm.retry(t.address.orEmpty(), m, sub) }
                         )
                     }
                 }
@@ -278,7 +319,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
             Box(
                 Modifier
                     .fillMaxSize()
-                    .graphicsLayer { translationX = (1f - settingsProgress.value) * size.width }
+                    .graphicsLayer { translationX = (1f - settingsProgress.value) * size.width * dir }
                     .plainClickable {}
             ) {
                 SettingsScreen(
@@ -304,11 +345,31 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                     onNotifications = vm::setNotifications,
                     onPreviews = vm::setPreviews,
                     onSystemNotifications = {
-                        ctx.startActivity(
-                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-                        )
-                    }
+                        Notifier.ensureChannels(ctx)
+                        ctx.startActivity(Notifier.channelSettingsIntent(ctx))
+                    },
+                    notifSound = notifSound,
+                    notifVibrate = notifVibrate,
+                    notifHeadsUp = notifHeadsUp,
+                    notifLockScreen = notifLockScreen,
+                    notifQuickReply = notifQuickReply,
+                    notifCopyCode = notifCopyCode,
+                    notifGroup = notifGroup,
+                    onNotifSound = vm::setNotifSound,
+                    onNotifVibrate = vm::setNotifVibrate,
+                    onNotifHeadsUp = vm::setNotifHeadsUp,
+                    onNotifLockScreen = vm::setNotifLockScreen,
+                    onNotifQuickReply = vm::setNotifQuickReply,
+                    onNotifCopyCode = vm::setNotifCopyCode,
+                    onNotifGroup = vm::setNotifGroup,
+                    sims = sims,
+                    defaultSub = defaultSub,
+                    onDefaultSub = vm::setDefaultSub,
+                    onSaveSim = vm::saveSim,
+                    language = language,
+                    onLanguage = onLanguage,
+                    onBackup = { backupDialog = true },
+                    onRestore = { openLauncher.launch(arrayOf("*/*")) }
                 )
             }
             EdgeSwipeBack(
@@ -328,6 +389,43 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
             },
             modifier = Modifier.align(Alignment.CenterStart)
         )
+
+        if (backupDialog) {
+            app.ios.messages.ui.BackupPasswordDialog(
+                confirm = true,
+                onDismiss = { backupDialog = false },
+                onOk = { pw ->
+                    backupDialog = false
+                    backupPw = pw
+                    createLauncher.launch("messages-backup.imsgbak")
+                }
+            )
+        }
+        restoreUri?.let { u ->
+            app.ios.messages.ui.BackupPasswordDialog(
+                confirm = false,
+                onDismiss = { restoreUri = null },
+                onOk = { pw ->
+                    restoreUri = null
+                    vm.restoreBackup(u, pw)
+                }
+            )
+        }
+
+        if (!setupDismissed && (!hasPermission || !isDefault)) {
+            SetupScreen(
+                hasPermission = hasPermission,
+                isDefault = isDefault,
+                onGrant = { permLauncher.launch(requiredPermissions()) },
+                onMakeDefault = {
+                    val rm = ctx.getSystemService(RoleManager::class.java)
+                    if (rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
+                        roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_SMS))
+                    }
+                },
+                onSkip = { vm.dismissSetup() }
+            )
+        }
     }
 }
 
@@ -340,6 +438,7 @@ private fun EdgeSwipeBack(
     modifier: Modifier = Modifier
 ) {
     if (!enabled) return
+    val dir = rtlSign()
     val scope = rememberCoroutineScope()
     val commit by rememberUpdatedState(onCommit)
     val widthPx = with(androidx.compose.ui.platform.LocalDensity.current) {
@@ -359,7 +458,7 @@ private fun EdgeSwipeBack(
                     onDragCancel = { scope.launch { progress.animateTo(1f, settle) } },
                     onHorizontalDrag = { change, dx ->
                         change.consume()
-                        scope.launch { progress.snapTo((progress.value - dx / widthPx).coerceIn(0f, 1f)) }
+                        scope.launch { progress.snapTo((progress.value - dir * dx / widthPx).coerceIn(0f, 1f)) }
                     }
                 )
             }

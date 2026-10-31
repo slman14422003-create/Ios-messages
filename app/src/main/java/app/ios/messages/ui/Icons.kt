@@ -11,11 +11,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun ChevronLeft(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(width = 13.dp, height = 22.dp)) {
+    val flip = rtlSign()
+    Canvas(modifier.size(width = 13.dp, height = 22.dp).graphicsLayer { scaleX = flip }) {
         val sw = 2.8.dp.toPx()
         val path = Path().apply {
             moveTo(size.width - sw / 2, sw / 2)
@@ -28,7 +30,8 @@ fun ChevronLeft(color: Color, modifier: Modifier = Modifier) {
 
 @Composable
 fun ChevronRight(color: Color, modifier: Modifier = Modifier, width: Int = 8, height: Int = 14, stroke: Float = 2f) {
-    Canvas(modifier.size(width.dp, height.dp)) {
+    val flip = rtlSign()
+    Canvas(modifier.size(width.dp, height.dp).graphicsLayer { scaleX = flip }) {
         val sw = stroke.dp.toPx()
         val path = Path().apply {
             moveTo(sw / 2, sw / 2)

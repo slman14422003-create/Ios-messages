@@ -1,7 +1,10 @@
 package app.ios.messages.data
 
 import android.Manifest
+import android.app.PendingIntent
+import android.content.ContentUris
 import android.content.ContentValues
+import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -20,7 +23,13 @@ class SmsRepository(private val ctx: Context) {
     private fun has(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
     fun canRead() = has(Manifest.permission.READ_SMS)
-    fun isDefault() = Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
+    fun isDefault(): Boolean {
+        val role = runCatching {
+            val rm = ctx.getSystemService(android.app.role.RoleManager::class.java)
+            rm.isRoleAvailable(android.app.role.RoleManager.ROLE_SMS) && rm.isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
+        }.getOrDefault(false)
+        return role || Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
+    }
     fun clearCache() = synchronized(nameCache) { nameCache.clear() }
 
     fun contactName(address: String): String? = synchronized(nameCache) {
@@ -137,34 +146,56 @@ class SmsRepository(private val ctx: Context) {
 
     fun messages(threadId: Long): List<Message> {
         if (!canRead()) return emptyList()
-        val out = ArrayList<Message>()
-        cr.query(
-            smsUri,
-            arrayOf("_id", "body", "date", "type", "read"),
-            "thread_id=?", arrayOf(threadId.toString()), "date DESC LIMIT 300"
-        )?.use { c ->
-            while (c.moveToNext()) {
-                out += Message(
-                    id = c.getLong(0),
-                    body = c.getString(1) ?: "",
-                    date = c.getLong(2),
-                    mine = c.getInt(3) != TYPE_INBOX,
-                    read = c.getInt(4) != 0
-                )
-            }
+        var out = ArrayList<Message>()
+        try {
+            smsMessages(threadId, true, out)
+        } catch (e: Exception) {
+            // Some devices have no sub_id column.
+            out = ArrayList()
+            smsMessages(threadId, false, out)
         }
         try {
-            mmsMessages(threadId, out)
+            try {
+                mmsMessages(threadId, true, out)
+            } catch (e: Exception) {
+                mmsMessages(threadId, false, out)
+            }
         } catch (_: Exception) {
         }
         out.sortBy { it.date }
         return out
     }
 
-    private fun mmsMessages(threadId: Long, out: MutableList<Message>) {
+    private fun smsMessages(threadId: Long, withSub: Boolean, out: MutableList<Message>) {
+        val cols = if (withSub) arrayOf("_id", "body", "date", "type", "read", "sub_id")
+        else arrayOf("_id", "body", "date", "type", "read")
+        cr.query(
+            smsUri, cols,
+            "thread_id=?", arrayOf(threadId.toString()), "date DESC LIMIT 300"
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val type = c.getInt(3)
+                out += Message(
+                    id = c.getLong(0),
+                    body = c.getString(1) ?: "",
+                    date = c.getLong(2),
+                    mine = type != TYPE_INBOX,
+                    read = c.getInt(4) != 0,
+                    subId = if (withSub) c.getInt(5) else -1,
+                    failed = type == TYPE_FAILED,
+                    sending = type == TYPE_OUTBOX || type == TYPE_QUEUED
+                )
+            }
+        }
+    }
+
+    private fun mmsMessages(threadId: Long, withSub: Boolean, out: MutableList<Message>) {
+        val mmsCols = if (withSub) arrayOf("_id", "date", "msg_box", "read", "sub_id")
+        else arrayOf("_id", "date", "msg_box", "read")
+        val added = ArrayList<Message>()
         cr.query(
             Uri.parse("content://mms"),
-            arrayOf("_id", "date", "msg_box", "read"),
+            mmsCols,
             "thread_id=? AND (m_type=128 OR m_type=132)", arrayOf(threadId.toString()), "date DESC LIMIT 100"
         )?.use { c ->
             while (c.moveToNext()) {
@@ -184,46 +215,82 @@ class SmsRepository(private val ctx: Context) {
                         }
                     }
                 }
-                out += Message(
+                val box = c.getInt(2)
+                added += Message(
                     id = -id,
                     body = texts.joinToString("\n"),
                     date = c.getLong(1) * 1000L,
-                    mine = c.getInt(2) != 1,
+                    mine = box != 1,
                     read = c.getInt(3) != 0,
-                    images = images
+                    images = images,
+                    subId = if (withSub) c.getInt(4) else -1,
+                    failed = box == 5,
+                    sending = box == 4
                 )
             }
         }
+        out += added
     }
 
     fun threadIdFor(address: String): Long = Telephony.Threads.getOrCreateThreadId(ctx, address)
 
-    fun send(address: String, body: String) {
-        val sm = ctx.getSystemService(SmsManager::class.java)
+    /** Sends an SMS through [subId] (or the system default when -1). */
+    fun send(address: String, body: String, subId: Int = -1) {
+        val sm = Sims.manager(ctx, subId)
         val parts = sm.divideMessage(body)
-        if (parts.size > 1) {
-            sm.sendMultipartTextMessage(address, null, parts, null, null)
-        } else {
-            sm.sendTextMessage(address, null, body, null, null)
-        }
-        // The default SMS app is responsible for writing the sent message itself.
+        // The default SMS app writes the message itself: first as "outbox", then the sent-receiver
+        // flips it to "sent" or "failed" when the radio answers.
+        var rowId = -1L
         if (isDefault()) {
             val v = ContentValues().apply {
                 put("address", address)
                 put("body", body)
                 put("date", System.currentTimeMillis())
                 put("read", 1)
-                put("type", TYPE_SENT)
+                put("type", TYPE_OUTBOX)
+                if (subId >= 0) put("sub_id", subId)
             }
-            try {
-                cr.insert(Uri.parse("content://sms/sent"), v)
+            rowId = try {
+                cr.insert(Uri.parse("content://sms/outbox"), v)?.let { ContentUris.parseId(it) } ?: -1L
             } catch (_: Exception) {
+                -1L
             }
+        }
+        val sentIntents = ArrayList<PendingIntent?>()
+        for (i in parts.indices) {
+            sentIntents += if (rowId >= 0) {
+                PendingIntent.getBroadcast(
+                    ctx,
+                    (rowId * 16 + i).toInt(),
+                    Intent(ctx, app.ios.messages.SmsSentReceiver::class.java)
+                        .putExtra("sms_id", rowId)
+                        .putExtra("address", address)
+                        .putExtra("sub_id", subId),
+                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            } else null
+        }
+        try {
+            if (parts.size > 1) {
+                sm.sendMultipartTextMessage(address, null, parts, sentIntents, null)
+            } else {
+                sm.sendTextMessage(address, null, body, sentIntents.firstOrNull(), null)
+            }
+        } catch (e: Exception) {
+            if (rowId >= 0) setType(rowId, TYPE_FAILED)
+            throw e
         }
     }
 
-    fun sendMms(address: String, body: String, image: Uri?) {
-        Mms.send(ctx, address, body, image)
+    fun setType(id: Long, type: Int) {
+        try {
+            cr.update(Uri.parse("content://sms/$id"), ContentValues().apply { put("type", type) }, null, null)
+        } catch (_: Exception) {
+        }
+    }
+
+    fun sendMms(address: String, body: String, image: Uri?, subId: Int = -1) {
+        Mms.send(ctx, address, body, image, subId)
     }
 
     fun markRead(threadId: Long) {
@@ -259,5 +326,8 @@ class SmsRepository(private val ctx: Context) {
     companion object {
         const val TYPE_INBOX = 1
         const val TYPE_SENT = 2
+        const val TYPE_OUTBOX = 4
+        const val TYPE_FAILED = 5
+        const val TYPE_QUEUED = 6
     }
 }

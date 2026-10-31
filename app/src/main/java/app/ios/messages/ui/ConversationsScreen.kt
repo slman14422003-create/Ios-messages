@@ -1,5 +1,7 @@
 package app.ios.messages.ui
 
+import androidx.compose.ui.text.withStyle
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -115,9 +117,9 @@ fun ConversationsScreen(
         if (query.isBlank()) filtered.filter { it.threadId !in pinned } else filtered
     }
     val title = when (filterIdx) {
-        1 -> "Unread Messages"
-        2 -> "Unknown Senders"
-        else -> "Messages"
+        1 -> stringResource(R.string.unread_messages)
+        2 -> stringResource(R.string.unknown_senders)
+        else -> stringResource(R.string.messages)
     }
 
     val listState = rememberLazyListState()
@@ -160,13 +162,13 @@ fun ConversationsScreen(
             if (!hasPermission) {
                 item(key = "perm") {
                     Banner(
-                        "Messages needs permission to read your SMS. If Android says it is blocked: App Settings, then the \u22EE menu, then Allow restricted settings.",
-                        "Allow", onGrant, "Open App Settings", onOpenSettings
+                        stringResource(R.string.perm_banner),
+                        stringResource(R.string.allow), onGrant, stringResource(R.string.open_app_settings), onOpenSettings
                     )
                 }
             } else if (!isDefault) {
                 item(key = "default") {
-                    Banner("Make Messages your default SMS app to send, receive and delete messages.", "Set Default", onMakeDefault)
+                    Banner(stringResource(R.string.default_banner), stringResource(R.string.set_default), onMakeDefault)
                 }
             }
 
@@ -232,7 +234,7 @@ fun ConversationsScreen(
                             contentAlignment = if (toPin) Alignment.CenterStart else Alignment.CenterEnd
                         ) {
                             Text(
-                                if (toPin) (if (c.threadId in pinned) "Unpin" else "Pin") else "Delete",
+                                if (toPin) (if (c.threadId in pinned) stringResource(R.string.unpin) else stringResource(R.string.pin)) else stringResource(R.string.delete),
                                 color = Color.White,
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Medium
@@ -260,7 +262,7 @@ fun ConversationsScreen(
             if (filtered.isEmpty() && hasPermission) {
                 item(key = "empty") {
                     Text(
-                        if (query.isBlank()) "No Messages" else "No Results",
+                        if (query.isBlank()) stringResource(R.string.no_messages) else stringResource(R.string.no_results),
                         color = p.secondary,
                         fontSize = 20.sp,
                         modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
@@ -285,7 +287,7 @@ fun ConversationsScreen(
                 }
             ) {
                 IosMenuItem(
-                    text = { Text(if (menuConv.threadId in pinned) "Unpin" else "Pin") },
+                    text = { Text(if (menuConv.threadId in pinned) stringResource(R.string.unpin) else stringResource(R.string.pin)) },
                     onClick = {
                         rowBounds.remove(menuConv.threadId)
                         rowMenu = null
@@ -293,7 +295,7 @@ fun ConversationsScreen(
                     }
                 )
                 IosMenuItem(
-                    text = { Text(if (menuConv.threadId in muted) "Show Alerts" else "Hide Alerts") },
+                    text = { Text(if (menuConv.threadId in muted) stringResource(R.string.show_alerts) else stringResource(R.string.hide_alerts)) },
                     onClick = {
                         rowMenu = null
                         onToggleMute(menuConv.threadId)
@@ -301,7 +303,7 @@ fun ConversationsScreen(
                 )
                 if (menuConv.unread > 0) {
                     IosMenuItem(
-                        text = { Text("Mark as Read") },
+                        text = { Text(stringResource(R.string.mark_as_read)) },
                         onClick = {
                             rowMenu = null
                             onMarkRead(listOf(menuConv.threadId))
@@ -310,7 +312,7 @@ fun ConversationsScreen(
                 }
                 if (isDefault) {
                     IosMenuItem(
-                        text = { Text("Delete", color = Red) },
+                        text = { Text(stringResource(R.string.delete), color = Red) },
                         onClick = {
                             rowMenu = null
                             confirmDelete = listOf(menuConv.threadId)
@@ -322,8 +324,8 @@ fun ConversationsScreen(
 
         confirmDelete?.let { ids ->
             IosConfirm(
-                title = if (ids.size > 1) "Delete ${ids.size} conversations?" else "Delete this conversation?",
-                confirmLabel = "Delete",
+                title = if (ids.size > 1) stringResource(R.string.delete_n_conversations, ids.size) else stringResource(R.string.delete_this_conversation),
+                confirmLabel = stringResource(R.string.delete),
                 onConfirm = {
                     onDelete(ids)
                     confirmDelete = null
@@ -343,7 +345,7 @@ fun ConversationsScreen(
             Box(Modifier.fillMaxWidth().height(44.dp)) {
                 Box(Modifier.align(Alignment.CenterStart)) {
                     Text(
-                        if (selecting) "Done" else "Edit",
+                        if (selecting) stringResource(R.string.done) else stringResource(R.string.edit),
                         color = p.blue,
                         fontSize = 17.sp,
                         fontWeight = if (selecting) FontWeight.SemiBold else FontWeight.Normal,
@@ -353,10 +355,10 @@ fun ConversationsScreen(
                     )
                     IosMenu(expanded = editMenu, onDismissRequest = { editMenu = false }) {
                         IosMenuItem(
-                            text = { Text("Select Messages") },
+                            text = { Text(stringResource(R.string.select_messages)) },
                             onClick = { editMenu = false; selecting = true; selected = emptySet() }
                         )
-                        listOf("All Messages", "Unread Messages", "Unknown Senders").forEachIndexed { i, label ->
+                        listOf(stringResource(R.string.all_messages), stringResource(R.string.unread_messages), stringResource(R.string.unknown_senders)).forEachIndexed { i, label ->
                             IosMenuItem(
                                 text = { Text(label) },
                                 onClick = { filterIdx = i; editMenu = false },
@@ -408,7 +410,7 @@ fun ConversationsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "Read All",
+                        stringResource(R.string.read_all),
                         color = p.blue,
                         fontSize = 17.sp,
                         modifier = Modifier.plainClickable {
@@ -420,7 +422,7 @@ fun ConversationsScreen(
                     )
                     val canDelete = selected.isNotEmpty() && isDefault
                     Text(
-                        "Delete",
+                        stringResource(R.string.delete),
                         color = if (canDelete) Red else p.tertiary,
                         fontSize = 17.sp,
                         modifier = Modifier.plainClickable {
@@ -448,22 +450,22 @@ private fun RowMenu(
 ) {
     IosMenu(expanded = expanded, onDismissRequest = onDismiss) {
         IosMenuItem(
-            text = { Text(if (isPinned) "Unpin" else "Pin") },
+            text = { Text(if (isPinned) stringResource(R.string.unpin) else stringResource(R.string.pin)) },
             onClick = { onTogglePin(); onDismiss() }
         )
         IosMenuItem(
-            text = { Text(if (isMuted) "Show Alerts" else "Hide Alerts") },
+            text = { Text(if (isMuted) stringResource(R.string.show_alerts) else stringResource(R.string.hide_alerts)) },
             onClick = { onToggleMute(); onDismiss() }
         )
         if (c.unread > 0) {
             IosMenuItem(
-                text = { Text("Mark as Read") },
+                text = { Text(stringResource(R.string.mark_as_read)) },
                 onClick = { onMarkRead(); onDismiss() }
             )
         }
         if (isDefault) {
             IosMenuItem(
-                text = { Text("Delete", color = Red) },
+                text = { Text(stringResource(R.string.delete), color = Red) },
                 onClick = { onDelete(); onDismiss() }
             )
         }
@@ -541,7 +543,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit) {
             modifier = Modifier.weight(1f),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) Text("Search", color = p.secondary, fontSize = 17.sp)
+                    if (value.isEmpty()) Text(stringResource(R.string.search), color = p.secondary, fontSize = 17.sp)
                     inner()
                 }
             }
@@ -631,18 +633,35 @@ private fun ConversationRow(
                         Spacer(Modifier.width(6.dp))
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text(DateFmt.list(c.date), color = p.secondary, fontSize = 15.sp, maxLines = 1)
+                    Text(DateFmt.list(androidx.compose.ui.platform.LocalContext.current, c.date), color = p.secondary, fontSize = 15.sp, maxLines = 1)
                     Spacer(Modifier.width(6.dp))
                     ChevronRight(p.tertiary)
                 }
-                Text(
-                    c.snippet,
-                    color = p.secondary,
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (!c.draft.isNullOrBlank()) {
+                    val draftPrefix = stringResource(R.string.draft_prefix)
+                    Text(
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            withStyle(androidx.compose.ui.text.SpanStyle(color = Red, fontWeight = FontWeight.Medium)) {
+                                append(draftPrefix)
+                            }
+                            append(c.draft)
+                        },
+                        color = p.secondary,
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Text(
+                        c.snippet,
+                        color = p.secondary,
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
         Hairline(Modifier.align(Alignment.BottomStart).padding(start = 88.dp))

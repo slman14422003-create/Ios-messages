@@ -337,7 +337,7 @@ object Mms {
         }
     }
 
-    fun send(ctx: Context, address: String, text: String, image: Uri?) {
+    fun send(ctx: Context, address: String, text: String, image: Uri?, subId: Int = -1) {
         val cr = ctx.contentResolver
         val bytes = image?.let { compressImage(ctx, it) }
         val pdu = buildSendReq(address, text.ifBlank { null }, bytes)
@@ -355,6 +355,7 @@ object Mms {
             put("rr", 129)
             put("d_rpt", 129)
             put("m_size", pdu.size)
+            if (subId >= 0) put("sub_id", subId)
         }
         val mu = cr.insert(Uri.parse("content://mms/outbox"), v) ?: throw IllegalStateException("insert")
         val id = ContentUris.parseId(mu)
@@ -395,14 +396,14 @@ object Mms {
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         try {
-            ctx.getSystemService(SmsManager::class.java).sendMultimediaMessage(ctx, uri, null, null, pi)
+            Sims.manager(ctx, subId).sendMultimediaMessage(ctx, uri, null, null, pi)
         } catch (e: Exception) {
             setBox(ctx, id, 5)
             throw e
         }
     }
 
-    fun download(ctx: Context, notification: ByteArray) {
+    fun download(ctx: Context, notification: ByteArray, subId: Int = -1) {
         val n = parseNotification(notification) ?: return
         val loc = n.location ?: return
         val f = File(dir(ctx), "dl_" + System.currentTimeMillis() + ".dat")
@@ -414,19 +415,20 @@ object Mms {
             f.name.hashCode(),
             Intent(ctx, MmsDownloadedReceiver::class.java)
                 .putExtra("file", f.absolutePath)
-                .putExtra("from", n.from ?: ""),
+                .putExtra("from", n.from ?: "")
+                .putExtra("sub_id", subId),
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        ctx.getSystemService(SmsManager::class.java).downloadMultimediaMessage(ctx, loc, uri, null, pi)
+        Sims.manager(ctx, subId).downloadMultimediaMessage(ctx, loc, uri, null, pi)
     }
 
-    fun onDownloaded(ctx: Context, path: String, from: String, ok: Boolean): Pair<String, String>? {
+    fun onDownloaded(ctx: Context, path: String, from: String, ok: Boolean, subId: Int = -1): Pair<String, String>? {
         val f = File(path)
         try {
             if (!ok) return null
             val r = parseRetrieve(f.readBytes()) ?: return null
             val addr = (r.from ?: from).ifBlank { return null }
-            storeIncoming(ctx, addr, r)
+            storeIncoming(ctx, addr, r, subId)
             val text = r.parts.firstOrNull { it.type.startsWith("text/plain") }
                 ?.let { String(it.data, Charsets.UTF_8).trim() }
             val hasImage = r.parts.any { it.type.startsWith("image/") }
@@ -436,7 +438,7 @@ object Mms {
         }
     }
 
-    private fun storeIncoming(ctx: Context, from: String, r: MmsRetrieved) {
+    private fun storeIncoming(ctx: Context, from: String, r: MmsRetrieved, subId: Int) {
         val cr = ctx.contentResolver
         val tid = Telephony.Threads.getOrCreateThreadId(ctx, from)
         val v = ContentValues().apply {
@@ -450,6 +452,7 @@ object Mms {
             put("v", 18)
             put("ct_t", "application/vnd.wap.multipart.related")
             put("m_size", r.parts.sumOf { it.data.size })
+            if (subId >= 0) put("sub_id", subId)
         }
         val mu = cr.insert(Uri.parse("content://mms/inbox"), v) ?: return
         val id = ContentUris.parseId(mu)

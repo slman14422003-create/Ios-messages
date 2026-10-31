@@ -111,14 +111,14 @@ fun NewMessageScreen(
     ) {
         Box(Modifier.fillMaxWidth().height(44.dp)) {
             Text(
-                "New Message",
+                stringResource(R.string.notif_new_message),
                 color = p.label,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.Center)
             )
             Text(
-                "Cancel",
+                stringResource(R.string.cancel),
                 color = p.blue,
                 fontSize = 17.sp,
                 modifier = Modifier
@@ -131,7 +131,7 @@ fun NewMessageScreen(
             Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("To:", color = p.secondary, fontSize = 17.sp)
+            Text(stringResource(R.string.to_label), color = p.secondary, fontSize = 17.sp)
             Spacer(Modifier.width(8.dp))
             BasicTextField(
                 value = to,
@@ -164,7 +164,7 @@ fun NewMessageScreen(
                                 Spacer(Modifier.width(12.dp))
                                 Column {
                                     Text(q, color = p.label, fontSize = 17.sp, fontWeight = FontWeight.Medium)
-                                    Text("Send to this number", color = p.secondary, fontSize = 14.sp)
+                                    Text(stringResource(R.string.send_to_number), color = p.secondary, fontSize = 14.sp)
                                 }
                             }
                             Hairline(Modifier.align(Alignment.BottomStart).padding(start = 68.dp))
@@ -214,7 +214,7 @@ fun NewMessageScreen(
                 if (rows.isEmpty() && !looksNumber) {
                     item(key = "none") {
                         Text(
-                            if (q.isEmpty()) "Type a name or phone number" else "No Contacts Found",
+                            if (q.isEmpty()) stringResource(R.string.type_name_or_number) else stringResource(R.string.no_contacts_found),
                             color = p.secondary,
                             fontSize = 17.sp,
                             textAlign = TextAlign.Center,

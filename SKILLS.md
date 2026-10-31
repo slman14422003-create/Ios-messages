@@ -32,3 +32,66 @@
 
 ### Next ideas
 - MMS attachments, message search inside a chat, mute conversation, blocked numbers
+
+## Task: Full notifications support (feature 11 of the 1-11 roadmap)
+
+### Done
+- Notifier.kt rewritten: per-settings channels (sound / vibration / pop-up combinations), separate channel for verification codes and for delivery problems
+- MessagingStyle per conversation with message history, sender Person, SIM label, private lock screen visibility
+- Actions: Reply (inline RemoteInput, default SMS app only), Mark as Read, Copy Code
+- Group summary notification when 2+ conversations are active
+- Notifications are cleared when a chat opens, when a thread is marked read, and when a conversation becomes read elsewhere (Notifier.syncRead)
+- Receivers.kt: ReplyReceiver, MarkReadReceiver, NotificationDismissedReceiver (registered in AndroidManifest.xml, VIBRATE permission added)
+- Prefs.kt: notifSound, notifVibrate, notifHeadsUp, notifLockScreen, notifQuickReply, notifCopyCode, notifGroup, notifChannelVersion
+- Settings screen: Lock Screen, Pop Up, Sound, Vibration, Quick Reply, Copy Code Button, Group toggles; "Sound & System Settings" opens the channel settings page
+
+### Files touched
+- Notifier.kt, Receivers.kt, AndroidManifest.xml, data/Prefs.kt, MessagesViewModel.kt, MainActivity.kt, ui/SettingsScreen.kt
+
+### Not verified
+- No compiler available in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+### Remaining roadmap (in order)
+1 spam filter + unknown senders + report/block, 2 scheduled messages, 3 drafts label in red, 4 location sticker, 6 OTP quick reply (done inside notifications), 7 encrypted local backup/restore, 8 default-app setup screen (fix it staying stuck after becoming default), 9 business message tabs, 10 Arabic/English RTL with language picker
+
+## Task: Full Arabic/English with RTL and in-app language choice (feature 10)
+
+### Done
+- All UI text moved to resources: res/values/strings.xml (English) and res/values-ar/strings.xml (Arabic); notifications, toasts, dates and settings all localized
+- Lang.kt: wraps a Context with the saved language (Prefs.language: system / en / ar), sets Locale default and layout direction; used by MainActivity.attachBaseContext, Notifier, Receivers, MessagesViewModel
+- Language picker section in Settings (System, English, Arabic); selecting recreates the activity
+- AndroidManifest supportsRtl=true
+- RTL fixes: page slide direction and edge swipe back (rtlSign() in ui/Components.kt), bubble tail mirrored in BubbleShape, chevrons mirrored in ui/Icons.kt, timestamp swipe reveal direction, shadow gradient direction
+- DateFmt takes a Context for Today / Yesterday / "at" and uses locale date formats
+- Notification channels get localized names on every ensureChannels call
+- Version bumped to 1.9 (versionCode 7)
+
+### Files touched
+- Lang.kt (new), res/values/strings.xml, res/values-ar/strings.xml, AndroidManifest.xml, app/build.gradle.kts
+- MainActivity.kt, MessagesViewModel.kt, Notifier.kt, Receivers.kt, data/Prefs.kt
+- ui/ChatScreen.kt, ConversationsScreen.kt, NewMessageScreen.kt, SettingsScreen.kt, SimUi.kt, Components.kt, Icons.kt, DateFmt.kt
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+- CrashScreen text in MainActivity is intentionally left in English
+
+### Remaining roadmap (requested order)
+8 default-app setup screen (fix it staying stuck after becoming default), then 3 drafts red label, then 7 encrypted backup/restore, then 1, 2, 4, 9
+
+## Task: default-app setup fix (8), drafts (3), encrypted backup/restore (7)
+
+### Done
+- 8: SmsRepository.isDefault() now also checks RoleManager.isRoleHeld(ROLE_SMS); MessagesViewModel.recheckRole() re-reads default/permission state immediately and again after 0.5s and 2s (called from onResume and from the role result); setup screen is dismissed automatically once permission and default are both granted (MainActivity LaunchedEffect)
+- 3: drafts show the red "Draft:" label in the list (already present) and now also appear for numbers with no conversation yet (Prefs.allDrafts, synthetic Conversation with negative thread id, opened by address); deleting a conversation removes its draft; draft time and address stored in Prefs
+- 7: data/Backup.kt exports text messages (inbox, sent, failed) to a file encrypted with AES-256-GCM, key from PBKDF2-HMAC-SHA256 (150000 iterations), gzip JSON; restore skips messages already present (address, date, type); ui/BackupUi.kt password dialog; Settings "Backup" section; file chosen through the system file picker (.imsgbak)
+- MMS/photo messages are not part of the backup
+- Version bumped to 2.0 (versionCode 8)
+
+### Files touched
+- data/SmsRepository.kt, data/Prefs.kt, data/Backup.kt (new), MessagesViewModel.kt, MainActivity.kt, ui/SettingsScreen.kt, ui/BackupUi.kt (new), res strings (en, ar)
+
+### Not verified
+- No compiler in the sandbox: build with GitHub Actions and send the log if anything fails
+
+### Remaining roadmap
+1 spam filter + unknown senders section + report/block, 2 scheduled messages with SIM choice, 4 location sticker, 9 business message tabs (Transactions, Offers)

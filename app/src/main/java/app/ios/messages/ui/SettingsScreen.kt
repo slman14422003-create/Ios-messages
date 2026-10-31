@@ -23,7 +23,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import app.ios.messages.data.SimInfo
+import app.ios.messages.data.Sims
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -49,9 +57,38 @@ fun SettingsScreen(
     onBubbleBlue: (Boolean) -> Unit,
     onNotifications: (Boolean) -> Unit,
     onPreviews: (Boolean) -> Unit,
-    onSystemNotifications: () -> Unit
+    onSystemNotifications: () -> Unit,
+    notifSound: Boolean = true,
+    notifVibrate: Boolean = true,
+    notifHeadsUp: Boolean = true,
+    notifLockScreen: Boolean = true,
+    notifQuickReply: Boolean = true,
+    notifCopyCode: Boolean = true,
+    notifGroup: Boolean = true,
+    onNotifSound: (Boolean) -> Unit = {},
+    onNotifVibrate: (Boolean) -> Unit = {},
+    onNotifHeadsUp: (Boolean) -> Unit = {},
+    onNotifLockScreen: (Boolean) -> Unit = {},
+    onNotifQuickReply: (Boolean) -> Unit = {},
+    onNotifCopyCode: (Boolean) -> Unit = {},
+    onNotifGroup: (Boolean) -> Unit = {},
+    sims: List<SimInfo> = emptyList(),
+    defaultSub: Int = -1,
+    onDefaultSub: (Int) -> Unit = {},
+    onSaveSim: (Int, String, Long) -> Unit = { _, _, _ -> },
+    language: String = "system",
+    onLanguage: (String) -> Unit = {},
+    onBackup: () -> Unit = {},
+    onRestore: () -> Unit = {}
 ) {
     val p = LocalPalette.current
+    var editing by remember { mutableStateOf<SimInfo?>(null) }
+    editing?.let { sim ->
+        SimEditDialog(sim, onDismiss = { editing = null }, onSave = { name, color ->
+            onSaveSim(sim.subId, name, color)
+            editing = null
+        })
+    }
     Column(Modifier.fillMaxSize().background(p.groupBg)) {
         Column(Modifier.fillMaxWidth().background(p.groupBg).statusBarsPadding()) {
             Box(Modifier.fillMaxWidth().height(44.dp)) {
@@ -64,10 +101,10 @@ fun SettingsScreen(
                 ) {
                     ChevronLeft(p.blue)
                     Spacer(Modifier.width(6.dp))
-                    Text("Messages", color = p.blue, fontSize = 17.sp)
+                    Text(stringResource(R.string.messages), color = p.blue, fontSize = 17.sp)
                 }
                 Text(
-                    "Settings",
+                    stringResource(R.string.settings),
                     color = p.label,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -85,62 +122,116 @@ fun SettingsScreen(
                 .padding(bottom = 32.dp)
         ) {
             Section(
-                "Default App",
-                "Messages must be the default SMS app to send, receive and delete messages."
+                stringResource(R.string.default_app),
+                stringResource(R.string.default_app_desc)
             ) {
                 SettingRow(
-                    "Default SMS App",
+                    stringResource(R.string.default_sms_app),
                     last = true,
                     onClick = if (isDefault) null else onMakeDefault
                 ) {
                     Text(
-                        if (isDefault) "Messages" else "Set Default",
+                        if (isDefault) stringResource(R.string.messages) else stringResource(R.string.set_default),
                         color = if (isDefault) p.secondary else p.blue,
                         fontSize = 17.sp
                     )
                 }
             }
 
-            Section("Sent Bubble Color") {
-                SettingRow("Green (SMS)", onClick = { onBubbleBlue(false) }) {
+            if (sims.isNotEmpty()) {
+                Section(
+                    stringResource(R.string.sim_cards),
+                    stringResource(R.string.sim_cards_desc)
+                ) {
+                    sims.forEach { sim ->
+                        SettingRow(sim.label, onClick = { editing = sim }) {
+                            Box(Modifier.size(14.dp).clip(CircleShape).background(Color(sim.color)))
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(R.string.sim_n, sim.slot + 1), color = p.secondary, fontSize = 17.sp)
+                            Spacer(Modifier.width(8.dp))
+                            ChevronRight(p.tertiary)
+                        }
+                    }
+                    val options = listOf(-1) + sims.map { it.subId }
+                    val current = if (defaultSub in options) defaultSub else -1
+                    SettingRow(
+                        stringResource(R.string.default_sim),
+                        last = true,
+                        onClick = { onDefaultSub(options[(options.indexOf(current) + 1) % options.size]) }
+                    ) {
+                        Text(
+                            if (current == -1) stringResource(R.string.automatic) else sims.first { it.subId == current }.label,
+                            color = p.secondary,
+                            fontSize = 17.sp
+                        )
+                    }
+                }
+            }
+
+            Section(stringResource(R.string.language), stringResource(R.string.language_desc)) {
+                listOf(
+                    "system" to stringResource(R.string.lang_system),
+                    "en" to stringResource(R.string.lang_english),
+                    "ar" to stringResource(R.string.lang_arabic)
+                ).forEachIndexed { i, (tag, label) ->
+                    SettingRow(label, last = i == 2, onClick = { if (language != tag) onLanguage(tag) }) {
+                        if (language == tag) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
+                    }
+                }
+            }
+
+            Section(stringResource(R.string.sent_bubble_color)) {
+                SettingRow(stringResource(R.string.green_sms), onClick = { onBubbleBlue(false) }) {
                     Box(Modifier.size(22.dp).clip(CircleShape).background(SentBubble))
                     Spacer(Modifier.width(12.dp))
                     if (!bubbleBlue) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
                 }
-                SettingRow("Blue (iMessage)", last = true, onClick = { onBubbleBlue(true) }) {
+                SettingRow(stringResource(R.string.blue_imessage), last = true, onClick = { onBubbleBlue(true) }) {
                     Box(Modifier.size(22.dp).clip(CircleShape).background(IosBlue))
                     Spacer(Modifier.width(12.dp))
                     if (bubbleBlue) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
                 }
             }
 
-            Section("Notifications") {
-                SettingRow("Allow Notifications") { IosSwitch(notifications, onNotifications) }
-                SettingRow("Show Previews") { IosSwitch(previews, onPreviews) }
-                SettingRow("Sound & System Settings", last = true, onClick = onSystemNotifications) {
+            Section(stringResource(R.string.notifications)) {
+                SettingRow(stringResource(R.string.allow_notifications)) { IosSwitch(notifications, onNotifications) }
+                SettingRow(stringResource(R.string.show_previews)) { IosSwitch(previews, onPreviews) }
+                SettingRow(stringResource(R.string.show_lock_screen)) { IosSwitch(notifLockScreen, onNotifLockScreen) }
+                SettingRow(stringResource(R.string.pop_up)) { IosSwitch(notifHeadsUp, onNotifHeadsUp) }
+                SettingRow(stringResource(R.string.sound)) { IosSwitch(notifSound, onNotifSound) }
+                SettingRow(stringResource(R.string.vibration)) { IosSwitch(notifVibrate, onNotifVibrate) }
+                SettingRow(stringResource(R.string.quick_reply)) { IosSwitch(notifQuickReply, onNotifQuickReply) }
+                SettingRow(stringResource(R.string.copy_code_button)) { IosSwitch(notifCopyCode, onNotifCopyCode) }
+                SettingRow(stringResource(R.string.group_notifications)) { IosSwitch(notifGroup, onNotifGroup) }
+                SettingRow(stringResource(R.string.sound_system_settings), last = true, onClick = onSystemNotifications) {
                     ChevronRight(p.tertiary)
                 }
             }
 
-            Section("Permissions") {
+            Section(stringResource(R.string.backup_title), stringResource(R.string.backup_desc)) {
+                SettingRow(stringResource(R.string.backup_export), onClick = onBackup) { ChevronRight(p.tertiary) }
+                SettingRow(stringResource(R.string.backup_restore), last = true, onClick = onRestore) { ChevronRight(p.tertiary) }
+            }
+
+            Section(stringResource(R.string.permissions)) {
                 SettingRow(
-                    "SMS & Contacts Access",
+                    stringResource(R.string.sms_contacts_access),
                     onClick = if (hasPermission) null else onGrant
                 ) {
                     Text(
-                        if (hasPermission) "Allowed" else "Allow",
+                        if (hasPermission) stringResource(R.string.allowed) else stringResource(R.string.allow),
                         color = if (hasPermission) p.secondary else p.blue,
                         fontSize = 17.sp
                     )
                 }
-                SettingRow("App Settings", last = true, onClick = onAppSettings) {
+                SettingRow(stringResource(R.string.app_settings), last = true, onClick = onAppSettings) {
                     ChevronRight(p.tertiary)
                 }
             }
 
-            Section("About") {
-                SettingRow("Version", last = true) {
-                    Text("1.5", color = p.secondary, fontSize = 17.sp)
+            Section(stringResource(R.string.about)) {
+                SettingRow(stringResource(R.string.version), last = true) {
+                    Text("2.0", color = p.secondary, fontSize = 17.sp)
                 }
             }
         }
@@ -228,4 +319,42 @@ private fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
                 .background(Color.White, CircleShape)
         )
     }
+}
+
+
+@Composable
+private fun SimEditDialog(sim: SimInfo, onDismiss: () -> Unit, onSave: (String, Long) -> Unit) {
+    var name by remember { mutableStateOf(sim.label) }
+    var color by remember { mutableStateOf(sim.color) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sim_dialog_title, sim.slot + 1, sim.carrier)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { if (it.length <= 16) name = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.sim_name_hint)) }
+                )
+                Spacer(Modifier.height(16.dp))
+                Row {
+                    Sims.palette.forEach { c ->
+                        Box(
+                            Modifier
+                                .padding(end = 10.dp)
+                                .size(if (c == color) 32.dp else 28.dp)
+                                .clip(CircleShape)
+                                .background(Color(c))
+                                .plainClickable { color = c }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name.ifBlank { sim.carrier }, color) }) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
 }

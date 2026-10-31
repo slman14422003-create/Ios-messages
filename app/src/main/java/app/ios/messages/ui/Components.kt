@@ -158,7 +158,8 @@ class BubbleShape(private val mine: Boolean, private val tail: Boolean) : Shape 
         val r = with(density) { 18.dp.toPx() }.coerceAtMost(size.height / 2f)
         val w = size.width
         val h = size.height
-        fun fx(x: Float) = if (mine) x else w - x
+        val rtl = layoutDirection == LayoutDirection.Rtl
+        fun fx(x: Float) = if (mine != rtl) x else w - x
         val right = w - tw // body right edge in "mine" coordinates
 
         val body = Path().apply {
@@ -393,7 +394,7 @@ fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDis
                 Box(
                     Modifier.weight(1f).fillMaxHeight().iosClickable(onDismiss),
                     contentAlignment = Alignment.Center
-                ) { Text("Cancel", color = p.blue, fontSize = 17.sp) }
+                ) { Text(stringResource(R.string.cancel), color = p.blue, fontSize = 17.sp) }
                 Box(Modifier.width(Dp.Hairline).fillMaxHeight().background(p.separator))
                 Box(
                     Modifier.weight(1f).fillMaxHeight().iosClickable(onConfirm),
@@ -429,3 +430,6 @@ fun IosMenuItem(
         Hairline(Modifier.align(Alignment.BottomStart))
     }
 }
+
+@Composable
+fun rtlSign(): Float = if (androidx.compose.ui.platform.LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f

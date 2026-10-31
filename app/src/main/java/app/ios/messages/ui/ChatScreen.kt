@@ -101,6 +101,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ios.messages.ChatTarget
 import app.ios.messages.data.Message
+import app.ios.messages.data.Otp
+import app.ios.messages.data.SimInfo
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.delay
 
 private sealed interface ChatItem {
     val key: String
@@ -113,7 +122,7 @@ private sealed interface ChatItem {
         override val key: String get() = "m${m.id}"
     }
 
-    data class Status(val text: String) : ChatItem {
+    data class Status(val text: String, val failed: Boolean = false, val msg: Message? = null) : ChatItem {
         override val key: String get() = "status"
     }
 }
@@ -121,14 +130,14 @@ private sealed interface ChatItem {
 private const val TIME_GAP = 60L * 60_000L
 
 /** Like iOS: consecutive messages from the same sender form a group; only the last one gets a tail. */
-private fun buildItems(msgs: List<Message>): List<ChatItem> {
+private fun buildItems(ctx: android.content.Context, msgs: List<Message>): List<ChatItem> {
     val out = ArrayList<ChatItem>(msgs.size + 8)
     var prev: Message? = null
     msgs.forEachIndexed { i, m ->
         val p = prev
         val header = p == null || m.date - p.date > TIME_GAP
         if (header) {
-            val (d, t) = DateFmt.chat(m.date)
+            val (d, t) = DateFmt.chat(ctx, m.date)
             out += ChatItem.Time(d, t, m.id)
         }
         val next = msgs.getOrNull(i + 1)
@@ -137,19 +146,58 @@ private fun buildItems(msgs: List<Message>): List<ChatItem> {
         out += ChatItem.Bubble(m, tail, tight)
         prev = m
     }
-    if (msgs.lastOrNull()?.mine == true) out += ChatItem.Status("Sent as Text Message")
+    val last = msgs.lastOrNull()
+    if (last != null && last.mine) {
+        out += ChatItem.Status(
+            when {
+                last.failed -> ctx.getString(R.string.not_delivered)
+                last.sending -> ctx.getString(R.string.sending)
+                else -> ctx.getString(R.string.sent_as_text)
+            },
+            last.failed, last
+        )
+    }
     return out
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     target: ChatTarget,
     messages: List<Message>,
     isDefault: Boolean,
+    sims: List<SimInfo>,
+    initialSim: Int,
+    initialDraft: String,
     onBack: () -> Unit,
-    onSend: (address: String, body: String, attachment: String?) -> Unit,
-    onDeleteMessage: (Long) -> Unit
+    onSend: (address: String, body: String, attachment: String?, subId: Int) -> Unit,
+    onDeleteMessage: (Long) -> Unit,
+    onPickSim: (Int) -> Unit,
+    onDraft: (String) -> Unit,
+    onRetry: (Message, Int) -> Unit
+) {
+    CompositionLocalProvider(LocalSims provides sims) {
+        ChatScreenBody(
+            target, messages, isDefault, sims, initialSim, initialDraft,
+            onBack, onSend, onDeleteMessage, onPickSim, onDraft, onRetry
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChatScreenBody(
+    target: ChatTarget,
+    messages: List<Message>,
+    isDefault: Boolean,
+    sims: List<SimInfo>,
+    initialSim: Int,
+    initialDraft: String,
+    onBack: () -> Unit,
+    onSend: (address: String, body: String, attachment: String?, subId: Int) -> Unit,
+    onDeleteMessage: (Long) -> Unit,
+    onPickSim: (Int) -> Unit,
+    onDraft: (String) -> Unit,
+    onRetry: (Message, Int) -> Unit
 ) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
@@ -158,13 +206,27 @@ fun ChatScreen(
     val address = target.address.orEmpty()
     var menu by remember { mutableStateOf(false) }
     val name = target.name ?: target.address ?: ""
-    var text by rememberSaveable { mutableStateOf("") }
+    var text by rememberSaveable(address) { mutableStateOf(initialDraft) }
+    var picked by remember(address) { mutableStateOf<Int?>(null) }
+    val simSel = picked?.takeIf { s -> sims.any { it.subId == s } } ?: initialSim
+    var warned by rememberSaveable(address) { mutableStateOf(false) }
+    var wrongSim by remember { mutableStateOf(false) }
+    val latestText by rememberUpdatedState(text)
+    val saveDraft by rememberUpdatedState(onDraft)
+    LaunchedEffect(text) {
+        delay(600)
+        if (address.isNotEmpty()) saveDraft(text)
+    }
+    DisposableEffect(address) {
+        onDispose { if (address.isNotEmpty()) saveDraft(latestText) }
+    }
     var attach by rememberSaveable { mutableStateOf<String?>(null) }
     var viewing by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) attach = uri.toString()
     }
-    val rev = remember(messages) { buildItems(messages).asReversed() }
+    val itemsCtx = androidx.compose.ui.platform.LocalContext.current
+    val rev = remember(messages) { buildItems(itemsCtx, messages).asReversed() }
     val listState = rememberLazyListState()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
@@ -172,6 +234,7 @@ fun ChatScreen(
     val barH = 94.dp
     val tick = rememberTick()
     val scope = rememberCoroutineScope()
+    val rdir = rtlSign()
     val reveal = remember { Animatable(0f) }
     val revealPx = with(density) { 64.dp.toPx() }
 
@@ -203,7 +266,7 @@ fun ChatScreen(
                         onDragCancel = { scope.launch { reveal.animateTo(0f, back) } },
                         onHorizontalDrag = { change, dx ->
                             change.consume()
-                            scope.launch { reveal.snapTo((reveal.value - dx / revealPx).coerceIn(0f, 1f)) }
+                            scope.launch { reveal.snapTo((reveal.value - rdir * dx / revealPx).coerceIn(0f, 1f)) }
                         }
                     )
                 },
@@ -223,13 +286,43 @@ fun ChatScreen(
                         { viewing = it },
                         if (listReady) Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f)) else Modifier
                     )
-                    is ChatItem.Status -> Text(
-                        item.text,
-                        color = p.secondary,
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth().padding(top = 3.dp, end = 16.dp)
-                    )
+                    is ChatItem.Status -> Column(
+                        Modifier.fillMaxWidth().padding(top = 3.dp, end = 16.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            item.text,
+                            color = if (item.failed) Red else p.secondary,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.End
+                        )
+                        val fm = item.msg
+                        if (item.failed && fm != null && fm.images.isEmpty()) {
+                            val other = if (sims.size > 1) sims.firstOrNull { it.subId != fm.subId } else null
+                            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                if (other != null) {
+                                    Text(
+                                        stringResource(R.string.send_via, other.label),
+                                        color = p.blue,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.plainClickable {
+                                            picked = other.subId
+                                            onPickSim(other.subId)
+                                            onRetry(fm, other.subId)
+                                        }
+                                    )
+                                }
+                                Text(
+                                    stringResource(R.string.try_again),
+                                    color = p.blue,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.plainClickable { onRetry(fm, fm.subId) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -258,7 +351,7 @@ fun ChatScreen(
                     Box(Modifier.align(Alignment.BottomCenter)) {
                         IosMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             IosMenuItem(
-                                text = { Text("Call") },
+                                text = { Text(stringResource(R.string.call)) },
                                 onClick = {
                                     menu = false
                                     runCatching {
@@ -267,7 +360,7 @@ fun ChatScreen(
                                 }
                             )
                             IosMenuItem(
-                                text = { Text("Add to Contacts") },
+                                text = { Text(stringResource(R.string.add_to_contacts)) },
                                 onClick = {
                                     menu = false
                                     runCatching {
@@ -281,7 +374,7 @@ fun ChatScreen(
                                 }
                             )
                             IosMenuItem(
-                                text = { Text("Copy Number") },
+                                text = { Text(stringResource(R.string.copy_number)) },
                                 onClick = {
                                     menu = false
                                     clipboard.setText(AnnotatedString(address))
@@ -315,22 +408,64 @@ fun ChatScreen(
 
         viewing?.let { ImageViewer(it) { viewing = null } }
 
+        val doSend = { sub: Int ->
+            val body = text.trim()
+            if (body.isNotEmpty() || attach != null) {
+                tick()
+                onSend(address, body, attach, sub)
+                text = ""
+                attach = null
+                onDraft("")
+            }
+        }
+        val lastInSub = messages.lastOrNull { !it.mine && it.subId >= 0 }?.subId
+        if (wrongSim) {
+            val a = sims.firstOrNull { it.subId == lastInSub }
+            val b = sims.firstOrNull { it.subId == simSel }
+            if (a != null && b != null) {
+                AlertDialog(
+                    onDismissRequest = { wrongSim = false },
+                    title = { Text(stringResource(R.string.different_sim)) },
+                    text = { Text(stringResource(R.string.different_sim_msg, a.label, b.label)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            wrongSim = false
+                            warned = true
+                            doSend(simSel)
+                        }) { Text(stringResource(R.string.send_from, b.label)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            wrongSim = false
+                            picked = a.subId
+                            onPickSim(a.subId)
+                            doSend(a.subId)
+                        }) { Text(stringResource(R.string.use_sim, a.label)) }
+                    }
+                )
+            } else wrongSim = false
+        }
+
         Box(Modifier.align(Alignment.BottomCenter)) {
             InputBar(
                 text = text,
                 attach = attach,
+                sims = sims,
+                simSel = simSel,
+                onSim = { picked = it; onPickSim(it) },
                 onChange = { text = it },
                 onHeight = { inputH = it },
                 onPlus = { picker.launch("image/*") },
                 onClearAttach = { attach = null },
                 onSend = {
-                    val body = text.trim()
-                    val addr = address
-                    if ((body.isNotEmpty() || attach != null) && addr.isNotEmpty()) {
-                        tick()
-                        onSend(addr, body, attach)
-                        text = ""
-                        attach = null
+                    if (address.isNotEmpty() && (text.isNotBlank() || attach != null)) {
+                        if (sims.size > 1 && lastInSub != null && lastInSub != simSel && !warned &&
+                            sims.any { it.subId == lastInSub }
+                        ) {
+                            wrongSim = true
+                        } else {
+                            doSend(simSel)
+                        }
                     }
                 }
             )
@@ -375,6 +510,8 @@ private fun BubbleContent(
     val padStart = if (mine) 12.dp else 18.dp
     val padEnd = if (mine) 18.dp else 12.dp
     val hasText = b.m.body.isNotBlank()
+    val otp = remember(b.m.body, mine) { if (mine) null else Otp.extract(b.m.body) }
+    val sims = LocalSims.current
     Column(modifier, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
         b.m.images.forEachIndexed { i, uri ->
             if (i > 0) Spacer(Modifier.height(2.dp))
@@ -422,6 +559,10 @@ private fun BubbleContent(
                     .padding(start = padStart, end = padEnd, top = 7.dp, bottom = 7.dp)
             )
         }
+        if (otp != null && interactive) OtpChip(otp)
+        if (b.tail && sims.size > 1 && b.m.subId >= 0) {
+            sims.firstOrNull { it.subId == b.m.subId }?.let { SimTag(it) }
+        }
     }
 }
 
@@ -447,13 +588,14 @@ private fun BubbleRow(
     LaunchedEffect(Unit) {
         if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f))
     }
+    val bdir = rtlSign()
     val shiftPx = with(LocalDensity.current) { 56.dp.toPx() }
 
     Box(modifier.fillMaxWidth()) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .graphicsLayer { translationX = -reveal() * shiftPx }
+                .graphicsLayer { translationX = -reveal() * shiftPx * bdir }
                 .padding(top = if (b.tight) 2.dp else 9.dp, start = 8.dp, end = 8.dp),
             contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart
         ) {
@@ -466,7 +608,7 @@ private fun BubbleRow(
                         scaleY = s
                         alpha = v.coerceIn(0f, 1f)
                         translationY = (1f - v) * 14.dp.toPx()
-                        transformOrigin = TransformOrigin(if (mine) 1f else 0f, 1f)
+                        transformOrigin = TransformOrigin(if (mine == (bdir > 0f)) 1f else 0f, 1f)
                     }
                     .onGloballyPositioned { boundsRef[0] = it.boundsInWindow() }
             ) {
@@ -504,14 +646,14 @@ private fun BubbleRow(
             preview = { BubbleContent(b, maxW, false, {}, {}) }
         ) {
             IosMenuItem(
-                text = { Text("Copy") },
+                text = { Text(stringResource(R.string.copy)) },
                 onClick = {
                     menu = false
                     clipboard.setText(AnnotatedString(b.m.body))
                 }
             )
             IosMenuItem(
-                text = { Text("Share") },
+                text = { Text(stringResource(R.string.share)) },
                 onClick = {
                     menu = false
                     runCatching {
@@ -529,7 +671,7 @@ private fun BubbleRow(
             )
             if (isDefault) {
                 IosMenuItem(
-                    text = { Text("Delete", color = Red) },
+                    text = { Text(stringResource(R.string.delete), color = Red) },
                     onClick = {
                         menu = false
                         onDelete(b.m.id)
@@ -566,6 +708,9 @@ private fun ImageViewer(uri: String, onDismiss: () -> Unit) {
 private fun InputBar(
     text: String,
     attach: String?,
+    sims: List<SimInfo>,
+    simSel: Int,
+    onSim: (Int) -> Unit,
     onChange: (String) -> Unit,
     onHeight: (Int) -> Unit,
     onPlus: () -> Unit,
@@ -623,8 +768,17 @@ private fun InputBar(
                 ) { Text("\u00D7", color = Color.White, fontSize = 15.sp) }
             }
         }
+        if (sims.size > 1) {
+            SimSwitch(
+                sims, simSel, onSim,
+                Modifier.padding(start = 66.dp, top = if (attach != null) 4.dp else 12.dp)
+            )
+        }
         Row(
-            Modifier.padding(start = 12.dp, end = 12.dp, top = if (attach != null) 6.dp else 14.dp, bottom = 8.dp),
+            Modifier.padding(
+                start = 12.dp, end = 12.dp,
+                top = if (attach != null || sims.size > 1) 6.dp else 14.dp, bottom = 8.dp
+            ),
             verticalAlignment = Alignment.Bottom
         ) {
             GlassCircle(44.dp, onClick = onPlus) { PlusIcon(p.secondary) }
@@ -652,7 +806,7 @@ private fun InputBar(
                                     .padding(start = 16.dp, end = 6.dp, top = 11.dp, bottom = 11.dp)
                             ) {
                                 if (text.isEmpty()) {
-                                    Text(if (attach != null) "Add Caption" else "Text Message", color = p.secondary, fontSize = 17.sp)
+                                    Text(if (attach != null) stringResource(R.string.add_caption) else stringResource(R.string.text_message), color = p.secondary, fontSize = 17.sp)
                                 }
                                 inner()
                             }
