@@ -237,6 +237,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         Box(Modifier.fillMaxSize().graphicsLayer { translationX = -maxOf(progress.value, settingsProgress.value) * size.width * 0.3f * dir }) {
             ConversationsScreen(
                 conversations = conversations,
+                sims = sims,
                 pinned = pinned,
                 muted = muted,
                 isDefault = isDefault,

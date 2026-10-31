@@ -71,11 +71,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ios.messages.data.Conversation
+import app.ios.messages.data.SimInfo
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationsScreen(
     conversations: List<Conversation>,
+    sims: List<SimInfo> = emptyList(),
     pinned: Set<Long>,
     muted: Set<Long>,
     isDefault: Boolean,
@@ -94,6 +96,7 @@ fun ConversationsScreen(
     val p = LocalPalette.current
     var query by rememberSaveable { mutableStateOf("") }
     var filterIdx by rememberSaveable { mutableIntStateOf(0) }
+    var simFilter by rememberSaveable { mutableIntStateOf(-1) }
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<Long>()) }
     var editMenu by remember { mutableStateOf(false) }
@@ -103,11 +106,12 @@ fun ConversationsScreen(
     var confirmDelete by remember { mutableStateOf<List<Long>?>(null) }
     val rowBounds = remember { HashMap<Long, Rect>() }
 
-    val filtered = remember(conversations, filterIdx, query) {
+    val filtered = remember(conversations, filterIdx, simFilter, query) {
         conversations.filter { c ->
             val pass = when (filterIdx) {
                 1 -> c.unread > 0
                 2 -> !c.known
+                3 -> c.subId == simFilter
                 else -> true
             }
             pass && (query.isBlank() || c.name.contains(query, true) || c.snippet.contains(query, true))
@@ -122,6 +126,7 @@ fun ConversationsScreen(
     val title = when (filterIdx) {
         1 -> stringResource(R.string.unread_messages)
         2 -> stringResource(R.string.unknown_senders)
+        3 -> sims.firstOrNull { it.subId == simFilter }?.label ?: stringResource(R.string.messages)
         else -> stringResource(R.string.messages)
     }
 
@@ -255,6 +260,7 @@ fun ConversationsScreen(
                             selecting = selecting,
                             selected = c.threadId in selected,
                             muted = c.threadId in muted,
+                            sims = sims,
                             onClick = { if (selecting) toggle(c.threadId) else onOpen(c) },
                             onLongClick = { if (!selecting) { thud(); rowMenu = c.threadId } }
                         )
@@ -361,11 +367,30 @@ fun ConversationsScreen(
                             text = { Text(stringResource(R.string.select_messages)) },
                             onClick = { editMenu = false; selecting = true; selected = emptySet() }
                         )
+                        Text(
+                            stringResource(R.string.filter_by),
+                            color = p.secondary,
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 4.dp)
+                        )
                         listOf(stringResource(R.string.all_messages), stringResource(R.string.unread_messages), stringResource(R.string.unknown_senders)).forEachIndexed { i, label ->
                             IosMenuItem(
                                 text = { Text(label) },
                                 onClick = { filterIdx = i; editMenu = false },
                                 trailingIcon = { if (filterIdx == i) CheckMark(p.blue, Modifier.size(16.dp)) }
+                            )
+                        }
+                        if (sims.size > 1) sims.forEach { sm ->
+                            IosMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        SimBadge(sm.label, 22.dp)
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(sm.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                },
+                                onClick = { simFilter = sm.subId; filterIdx = 3; editMenu = false },
+                                trailingIcon = { if (filterIdx == 3 && simFilter == sm.subId) CheckMark(p.blue, Modifier.size(16.dp)) }
                             )
                         }
                     }
@@ -605,6 +630,7 @@ private fun ConversationRow(
     selecting: Boolean,
     selected: Boolean,
     muted: Boolean,
+    sims: List<SimInfo> = emptyList(),
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -656,14 +682,21 @@ private fun ConversationRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 } else {
-                    Text(
-                        c.snippet,
-                        color = p.secondary,
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    val rowSim = if (sims.size > 1) sims.firstOrNull { it.subId == c.subId } else null
+                    Row(verticalAlignment = Alignment.Top) {
+                        if (rowSim != null) {
+                            SimBadge(rowSim.label, 14.dp, p.secondary, Modifier.padding(top = 3.dp, end = 5.dp))
+                        }
+                        Text(
+                            c.snippet,
+                            color = p.secondary,
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }

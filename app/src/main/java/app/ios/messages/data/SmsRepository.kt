@@ -52,8 +52,26 @@ class SmsRepository(private val ctx: Context) {
     fun conversations(): List<Conversation> {
         if (!canRead()) return emptyList()
         val fast = try { fastConversations() } catch (e: Exception) { null }
-        if (!fast.isNullOrEmpty()) return fast
-        return slowConversations()
+        val list = if (!fast.isNullOrEmpty()) fast else slowConversations()
+        return withSubIds(list)
+    }
+
+    /** Tags each thread with the SIM of its newest message (needs the sub_id column). */
+    private fun withSubIds(list: List<Conversation>): List<Conversation> {
+        if (list.isEmpty()) return list
+        val subs = HashMap<Long, Int>()
+        try {
+            cr.query(smsUri, arrayOf("thread_id", "sub_id"), null, null, "date DESC")?.use { c ->
+                while (c.moveToNext()) {
+                    val t = c.getLong(0)
+                    val sid = c.getInt(1)
+                    if (sid >= 0 && !subs.containsKey(t)) subs[t] = sid
+                }
+            }
+        } catch (_: Exception) {
+            return list
+        }
+        return list.map { c -> subs[c.threadId]?.let { c.copy(subId = it) } ?: c }
     }
 
     /** Uses the thread table (one row per conversation) instead of scanning every SMS. */

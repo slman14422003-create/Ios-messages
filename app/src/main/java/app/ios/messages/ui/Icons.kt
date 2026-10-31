@@ -145,3 +145,29 @@ fun BellSlash(color: Color, modifier: Modifier = Modifier) {
         drawLine(color, Offset(w * 0.08f, h * 0.10f), Offset(w * 0.92f, h * 0.92f), sw, StrokeCap.Round)
     }
 }
+
+@Composable
+fun MicIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val sw = 1.6.dp.toPx()
+        drawRoundRect(
+            color,
+            topLeft = Offset(w * 0.35f, h * 0.04f),
+            size = androidx.compose.ui.geometry.Size(w * 0.30f, h * 0.52f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.15f),
+            style = Stroke(sw)
+        )
+        drawArc(
+            color,
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(w * 0.2f, h * 0.22f),
+            size = androidx.compose.ui.geometry.Size(w * 0.6f, h * 0.52f),
+            style = Stroke(sw, cap = StrokeCap.Round)
+        )
+        drawLine(color, Offset(w / 2, h * 0.74f), Offset(w / 2, h * 0.94f), sw, StrokeCap.Round)
+    }
+}

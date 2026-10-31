@@ -8,7 +8,8 @@ data class Conversation(
     val date: Long,
     val unread: Int,
     val known: Boolean = true,
-    val draft: String? = null
+    val draft: String? = null,
+    val subId: Int = -1
 )
 
 data class Message(

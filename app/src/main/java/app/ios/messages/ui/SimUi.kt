@@ -1,5 +1,9 @@
 package app.ios.messages.ui
 
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.stringResource
 import app.ios.messages.R
 
@@ -8,6 +12,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,7 +51,7 @@ import app.ios.messages.data.SimInfo
 /** SIM cards of the device, visible to every bubble without threading it through parameters. */
 val LocalSims = staticCompositionLocalOf<List<SimInfo>> { emptyList() }
 
-/** Segmented control above the input field: one segment per SIM, filled with the SIM's color. */
+/** Floating pill above the input: one capsule per SIM, selected = vivid fill, other = dark tint of its color. */
 @Composable
 fun SimSwitch(
     sims: List<SimInfo>,
@@ -55,37 +60,41 @@ fun SimSwitch(
     modifier: Modifier = Modifier
 ) {
     val p = LocalPalette.current
-    val shape = RoundedCornerShape(17.dp)
+    val shape = RoundedCornerShape(50)
     Row(
         modifier
             .clip(shape)
-            .background(p.glass)
-            .border(Dp.Hairline, p.separator, shape)
-            .padding(2.dp)
+            .background(p.cell)
+            .border(Dp.Hairline, p.outline, shape)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         sims.forEach { s ->
             val on = s.subId == selected
-            val bg by animateColorAsState(if (on) Color(s.color) else Color.Transparent, label = "sim")
+            val c = Color(s.color)
+            val bg by animateColorAsState(if (on) c else c.copy(alpha = 0.28f), spring(dampingRatio = 0.8f, stiffness = 380f), label = "sim")
+            val src = remember { MutableInteractionSource() }
             Row(
                 Modifier
-                    .clip(RoundedCornerShape(15.dp))
+                    .pressScale(src, 0.92f)
+                    .clip(RoundedCornerShape(50))
                     .background(bg)
-                    .plainClickable { onPick(s.subId) }
-                    .padding(horizontal = 11.dp, vertical = 6.dp),
+                    .clickable(interactionSource = src, indication = null) { onPick(s.subId) }
+                    .padding(horizontal = 13.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     Modifier
                         .size(7.dp)
                         .clip(CircleShape)
-                        .background(if (on) Color.White else Color(s.color))
+                        .background(if (on) Color.White else c)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     s.label,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (on) Color.White else p.label,
+                    color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.widthIn(max = 110.dp)
@@ -223,5 +232,19 @@ private fun SetupStep(n: Int, done: Boolean, title: String, text: String, action
                 ) { Text(action, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
             }
         }
+    }
+}
+
+/** Letter inside a rounded square outline, like iOS shows for each SIM in menus. */
+@Composable
+fun SimBadge(label: String, size: Dp = 22.dp, color: Color = LocalPalette.current.label, modifier: Modifier = Modifier) {
+    val letter = label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "S"
+    Box(
+        modifier
+            .size(size)
+            .border(size.value.times(0.08f).coerceAtLeast(1f).dp, color, RoundedCornerShape(size * 0.24f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(letter, color = color, fontSize = (size.value * 0.58f).sp, fontWeight = FontWeight.SemiBold)
     }
 }

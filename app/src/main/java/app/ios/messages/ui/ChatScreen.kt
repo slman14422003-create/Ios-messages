@@ -1,5 +1,8 @@
 package app.ios.messages.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.res.stringResource
 import app.ios.messages.R
 
@@ -234,7 +237,7 @@ private fun ChatScreenBody(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val barH = 94.dp
+    val barH = 108.dp
     val tick = rememberTick()
     val scope = rememberCoroutineScope()
     val rdir = rtlSign()
@@ -389,20 +392,38 @@ private fun ChatScreenBody(
                         Modifier.align(Alignment.Center).plainClickable { menu = true },
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Avatar(name, 48.dp)
-                        Spacer(Modifier.height(4.dp))
+                        Avatar(name, 52.dp)
+                        Spacer(Modifier.height(5.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 name,
                                 color = p.label,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.widthIn(max = 200.dp)
                             )
                             Spacer(Modifier.width(3.dp))
-                            ChevronRight(p.secondary, width = 5, height = 8, stroke = 1.3f)
+                            ChevronRight(p.secondary, width = 5, height = 9, stroke = 1.4f)
+                        }
+                        val headerSim = sims.firstOrNull { s -> s.subId == messages.lastOrNull { !it.mine && it.subId >= 0 }?.subId }
+                            ?: sims.firstOrNull { it.subId == simSel }
+                        if (headerSim != null) {
+                            Spacer(Modifier.height(1.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val dotC by animateColorAsState(Color(headerSim.color), label = "dot")
+                                Box(Modifier.size(6.dp).clip(CircleShape).background(dotC))
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    headerSim.label,
+                                    color = p.secondary,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 160.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -771,10 +792,14 @@ private fun InputBar(
                 ) { Text("\u00D7", color = Color.White, fontSize = 15.sp) }
             }
         }
-        if (sims.size > 1) {
+        AnimatedVisibility(
+            visible = sims.size > 1,
+            enter = fadeIn() + scaleIn(initialScale = 0.85f, animationSpec = spring(dampingRatio = 0.7f, stiffness = 420f)),
+            exit = fadeOut() + scaleOut(targetScale = 0.85f)
+        ) {
             SimSwitch(
                 sims, simSel, onSim,
-                Modifier.padding(start = 66.dp, top = if (attach != null) 4.dp else 12.dp)
+                Modifier.padding(start = 58.dp, top = if (attach != null) 4.dp else 12.dp)
             )
         }
         Row(
@@ -784,15 +809,26 @@ private fun InputBar(
             ),
             verticalAlignment = Alignment.Bottom
         ) {
-            GlassCircle(44.dp, onClick = onPlus) { PlusIcon(p.secondary) }
+            Box(
+                Modifier
+                    .padding(bottom = 4.dp)
+                    .size(36.dp)
+                    .shadow(8.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.28f), spotColor = Color.Black.copy(alpha = 0.28f))
+                    .clip(CircleShape)
+                    .background(p.pressed)
+                    .plainClickable(onPlus),
+                contentAlignment = Alignment.Center
+            ) { PlusIcon(p.secondary) }
             Spacer(Modifier.width(10.dp))
             Box(
                 Modifier
                     .weight(1f)
                     .heightIn(min = 44.dp)
+                    .shadow(10.dp, pill, clip = false, ambientColor = Color.Black.copy(alpha = 0.28f), spotColor = Color.Black.copy(alpha = 0.28f))
                     .clip(pill)
-                    .background(p.glass)
-                    .border(Dp.Hairline, p.separator, pill)
+                    .animateContentSize(spring(dampingRatio = 0.85f, stiffness = 500f))
+                    .background(p.cell)
+                    .border(Dp.Hairline, p.outline, pill)
             ) {
                 BasicTextField(
                     value = text,
@@ -812,6 +848,13 @@ private fun InputBar(
                                     Text(if (attach != null) stringResource(R.string.add_caption) else stringResource(R.string.text_message), color = p.secondary, fontSize = 17.sp)
                                 }
                                 inner()
+                            }
+                            AnimatedVisibility(
+                                visible = !canSend,
+                                enter = fadeIn() + scaleIn(initialScale = 0.6f, animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)),
+                                exit = fadeOut() + scaleOut(targetScale = 0.6f)
+                            ) {
+                                Box(Modifier.padding(end = 12.dp, bottom = 12.dp)) { MicIcon(p.secondary) }
                             }
                             AnimatedVisibility(
                                 visible = canSend,

@@ -231,6 +231,7 @@ fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, co
         modifier
             .size(size)
             .pressScale(src, 0.88f)
+            .shadow(10.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.28f), spotColor = Color.Black.copy(alpha = 0.28f))
             .clip(CircleShape)
             .background(p.glass)
             .border(Dp.Hairline, p.separator, CircleShape)
