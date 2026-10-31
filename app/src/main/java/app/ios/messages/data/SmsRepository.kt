@@ -67,7 +67,8 @@ class SmsRepository(private val ctx: Context) {
                 if (list.isEmpty()) continue
                 out += Conversation(
                     tid, list[0], list.joinToString(", ") { contactName(it) ?: it },
-                    c.getString(3) ?: "", c.getLong(1), unread[tid] ?: 0
+                    c.getString(3) ?: "", c.getLong(1), unread[tid] ?: 0,
+                    contactName(list[0]) != null
                 )
             }
         }
@@ -97,12 +98,36 @@ class SmsRepository(private val ctx: Context) {
                     val addr = c.getString(iA) ?: ""
                     map[tid] = Conversation(
                         tid, addr, contactName(addr) ?: addr,
-                        c.getString(iB) ?: "", c.getLong(iD), 0
+                        c.getString(iB) ?: "", c.getLong(iD), 0,
+                        contactName(addr) != null
                     )
                 }
             }
         }
         return map.values.map { it.copy(unread = unread[it.threadId] ?: 0) }
+    }
+
+    fun contacts(): List<Contact> {
+        if (!has(Manifest.permission.READ_CONTACTS)) return emptyList()
+        val out = ArrayList<Contact>()
+        val seen = HashSet<String>()
+        val phone = ContactsContract.CommonDataKinds.Phone
+        try {
+            cr.query(
+                phone.CONTENT_URI,
+                arrayOf(phone.CONTACT_ID, phone.DISPLAY_NAME, phone.NUMBER),
+                null, null, phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC"
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val name = c.getString(1) ?: continue
+                    val num = c.getString(2) ?: continue
+                    val key = c.getLong(0).toString() + "|" + num.filter { it.isDigit() }.takeLast(9)
+                    if (seen.add(key)) out += Contact(c.getLong(0), name, num.trim())
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return out
     }
 
     fun messages(threadId: Long): List<Message> {

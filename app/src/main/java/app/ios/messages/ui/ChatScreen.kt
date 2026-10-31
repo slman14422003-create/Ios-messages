@@ -1,5 +1,8 @@
 package app.ios.messages.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -126,21 +129,20 @@ fun ChatScreen(
 ) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val density = LocalDensity.current
-    val composeMode = target.address == null
+    val address = target.address.orEmpty()
+    var menu by remember { mutableStateOf(false) }
     val name = target.name ?: target.address ?: ""
-    var to by rememberSaveable { mutableStateOf("") }
     var text by rememberSaveable { mutableStateOf("") }
     val rev = remember(messages) { buildItems(messages).asReversed() }
     val listState = rememberLazyListState()
     var inputH by remember { mutableIntStateOf(0) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val barH = if (composeMode) 88.dp else 94.dp
-    val toFocus = remember { FocusRequester() }
+    val barH = 94.dp
 
     val newestKey = rev.firstOrNull()?.key
     LaunchedEffect(newestKey) { if (rev.isNotEmpty()) listState.animateScrollToItem(0) }
-    LaunchedEffect(composeMode) { if (composeMode) runCatching { toFocus.requestFocus() } }
 
     Box(Modifier.fillMaxSize().background(p.bg).imePadding()) {
         // Newest message at index 0 + reverseLayout => opens at the bottom with no scroll jump.
@@ -182,51 +184,49 @@ fun ChatScreen(
                 )
                 .statusBarsPadding()
         ) {
-            if (composeMode) {
-                Box(Modifier.fillMaxWidth().height(44.dp)) {
-                    Text(
-                        "New Message",
-                        color = p.label,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                    Text(
-                        "Cancel",
-                        color = p.blue,
-                        fontSize = 17.sp,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .plainClickable(onBack)
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("To:", color = p.secondary, fontSize = 17.sp)
-                    Spacer(Modifier.width(8.dp))
-                    BasicTextField(
-                        value = to,
-                        onValueChange = { to = it },
-                        singleLine = true,
-                        textStyle = TextStyle(fontSize = 17.sp, color = p.label),
-                        cursorBrush = SolidColor(p.blue),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        modifier = Modifier.weight(1f).focusRequester(toFocus)
-                    )
-                }
-                Hairline()
-            } else {
+            run {
                 Box(Modifier.fillMaxWidth().height(barH)) {
                     GlassCircle(
                         44.dp,
                         Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
                         onClick = onBack
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
+                    Box(Modifier.align(Alignment.BottomCenter)) {
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Call") },
+                                onClick = {
+                                    menu = false
+                                    runCatching {
+                                        ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(address))))
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Add to Contacts") },
+                                onClick = {
+                                    menu = false
+                                    runCatching {
+                                        ctx.startActivity(
+                                            Intent(ContactsContract.Intents.Insert.ACTION).apply {
+                                                type = ContactsContract.RawContacts.CONTENT_TYPE
+                                                putExtra(ContactsContract.Intents.Insert.PHONE, address)
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Copy Number") },
+                                onClick = {
+                                    menu = false
+                                    clipboard.setText(AnnotatedString(address))
+                                }
+                            )
+                        }
+                    }
                     Column(
-                        Modifier.align(Alignment.Center),
+                        Modifier.align(Alignment.Center).plainClickable { menu = true },
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Avatar(name, 48.dp)
@@ -259,7 +259,7 @@ fun ChatScreen(
                 },
                 onSend = {
                     val body = text.trim()
-                    val addr = target.address ?: to.trim()
+                    val addr = address
                     if (body.isNotEmpty() && addr.isNotEmpty()) {
                         onSend(addr, body)
                         text = ""
@@ -291,6 +291,7 @@ private fun TimeHeader(t: ChatItem.Time) {
 @Composable
 private fun BubbleRow(b: ChatItem.Bubble, isDefault: Boolean, onDelete: (Long) -> Unit) {
     val p = LocalPalette.current
+    val sent = LocalSentColor.current
     val mine = b.m.mine
     val clipboard = LocalClipboardManager.current
     var menu by remember { mutableStateOf(false) }
@@ -312,7 +313,7 @@ private fun BubbleRow(b: ChatItem.Bubble, isDefault: Boolean, onDelete: (Long) -
                 lineHeight = 22.sp,
                 modifier = Modifier
                     .widthIn(max = maxW)
-                    .background(if (mine) SentBubble else p.received, shape)
+                    .background(if (mine) sent else p.received, shape)
                     .combinedClickable(
                         interactionSource = interaction,
                         indication = null,
@@ -352,6 +353,7 @@ private fun InputBar(
     onSend: () -> Unit
 ) {
     val p = LocalPalette.current
+    val sent = LocalSentColor.current
     val pill = RoundedCornerShape(22.dp)
     Row(
         Modifier
@@ -404,7 +406,7 @@ private fun InputBar(
                                     .padding(end = 5.dp, bottom = 5.dp)
                                     .size(34.dp)
                                     .clip(CircleShape)
-                                    .background(SentBubble)
+                                    .background(sent)
                                     .plainClickable(onSend),
                                 contentAlignment = Alignment.Center
                             ) { SendArrow(Color.White) }

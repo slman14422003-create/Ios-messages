@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import app.ios.messages.data.Prefs
 import app.ios.messages.data.SmsRepository
 
 object Notifier {
@@ -16,6 +17,9 @@ object Notifier {
 
     fun show(ctx: Context, address: String, body: String) {
         if (ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val prefs = Prefs(ctx)
+        if (!prefs.notifications) return
+        val shownBody = if (prefs.previews) body else "New Message"
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Messages", NotificationManager.IMPORTANCE_HIGH)
@@ -33,8 +37,8 @@ object Notifier {
         val n = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(Notification.BigTextStyle().bigText(body))
+            .setContentText(shownBody)
+            .setStyle(Notification.BigTextStyle().bigText(shownBody))
             .setContentIntent(pi)
             .setCategory(Notification.CATEGORY_MESSAGE)
             .setAutoCancel(true)

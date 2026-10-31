@@ -50,6 +50,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.ios.messages.ui.ChatScreen
 import app.ios.messages.ui.ConversationsScreen
 import app.ios.messages.ui.IMessageTheme
+import app.ios.messages.ui.IosBlue
+import app.ios.messages.ui.NewMessageScreen
+import app.ios.messages.ui.SentBubble
+import app.ios.messages.ui.SettingsScreen
+import app.ios.messages.ui.plainClickable
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -76,7 +81,8 @@ class MainActivity : ComponentActivity() {
         }
         if (savedInstanceState == null) pendingAddress = addressFrom(intent)
         setContent {
-            IMessageTheme {
+            val blue by vm.bubbleBlue.collectAsStateWithLifecycle()
+            IMessageTheme(sent = if (blue) IosBlue else SentBubble) {
                 App(vm, pendingAddress) { pendingAddress = null }
             }
         }
@@ -114,6 +120,12 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     val messages by vm.messages.collectAsStateWithLifecycle()
     val isDefault by vm.isDefault.collectAsStateWithLifecycle()
     val hasPermission by vm.hasPermission.collectAsStateWithLifecycle()
+    val pinned by vm.pinned.collectAsStateWithLifecycle()
+    val contacts by vm.contacts.collectAsStateWithLifecycle()
+    val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
+    val notifications by vm.notifications.collectAsStateWithLifecycle()
+    val previews by vm.previews.collectAsStateWithLifecycle()
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
     var chat by rememberSaveable { mutableStateOf<ChatTarget?>(null) }
     var lastChat by remember { mutableStateOf<ChatTarget?>(null) }
@@ -130,6 +142,15 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
         )
     }
     val chatVisible by remember { derivedStateOf { progress.value > 0.001f } }
+
+    val settingsProgress = remember { Animatable(if (settingsOpen) 1f else 0f) }
+    LaunchedEffect(settingsOpen) {
+        settingsProgress.animateTo(
+            if (settingsOpen) 1f else 0f,
+            tween(if (settingsOpen) 380 else 320, easing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))
+        )
+    }
+    val settingsVisible by remember { derivedStateOf { settingsProgress.value > 0.001f } }
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -150,16 +171,21 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
         chat = null
         vm.closeChat()
     }
+    BackHandler(enabled = settingsOpen) { settingsOpen = false }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -progress.value * size.width * 0.3f }) {
+        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -maxOf(progress.value, settingsProgress.value) * size.width * 0.3f }) {
             ConversationsScreen(
                 conversations = conversations,
+                pinned = pinned,
                 isDefault = isDefault,
                 hasPermission = hasPermission,
                 onOpen = { c -> chat = ChatTarget(c.threadId, c.address, c.name) },
                 onCompose = { chat = ChatTarget(null, null, null) },
-                onDelete = { vm.deleteThread(it.threadId) },
+                onSettings = { settingsOpen = true },
+                onDelete = { vm.deleteThreads(it) },
+                onMarkRead = { vm.markRead(it) },
+                onTogglePin = { vm.togglePin(it) },
                 onMakeDefault = {
                     val rm = ctx.getSystemService(RoleManager::class.java)
                     if (rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
@@ -182,22 +208,73 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                     if (t.address != null || t.threadId != null) vm.openChat(t.threadId, t.address)
                 }
                 Box(Modifier.fillMaxSize().graphicsLayer { translationX = (1f - progress.value) * size.width }) {
-                    ChatScreen(
-                        target = t,
-                        messages = messages,
-                        isDefault = isDefault,
-                        onBack = {
-                            chat = null
-                            vm.closeChat()
-                        },
-                        onSend = { addr, body ->
-                            vm.send(addr, body) { tid ->
-                                chat = ChatTarget(tid, addr, vm.nameFor(addr))
-                            }
-                        },
-                        onDeleteMessage = vm::deleteMessage
-                    )
+                    if (t.address == null) {
+                        NewMessageScreen(
+                            contacts = contacts,
+                            onCancel = {
+                                chat = null
+                                vm.closeChat()
+                            },
+                            onPick = { addr, name -> chat = ChatTarget(null, addr, name ?: vm.nameFor(addr)) }
+                        )
+                    } else {
+                        ChatScreen(
+                            target = t,
+                            messages = messages,
+                            isDefault = isDefault,
+                            onBack = {
+                                chat = null
+                                vm.closeChat()
+                            },
+                            onSend = { addr, body ->
+                                vm.send(addr, body) { tid ->
+                                    chat = ChatTarget(tid, addr, vm.nameFor(addr))
+                                }
+                            },
+                            onDeleteMessage = vm::deleteMessage
+                        )
+                    }
                 }
+            }
+        }
+
+        if (settingsVisible || settingsOpen) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = settingsProgress.value * 0.25f }.background(Color.Black))
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = (1f - settingsProgress.value) * size.width }
+                    .plainClickable {}
+            ) {
+                SettingsScreen(
+                    isDefault = isDefault,
+                    hasPermission = hasPermission,
+                    bubbleBlue = bubbleBlue,
+                    notifications = notifications,
+                    previews = previews,
+                    onBack = { settingsOpen = false },
+                    onMakeDefault = {
+                        val rm = ctx.getSystemService(RoleManager::class.java)
+                        if (rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
+                            roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_SMS))
+                        }
+                    },
+                    onGrant = { permLauncher.launch(requiredPermissions()) },
+                    onAppSettings = {
+                        ctx.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName))
+                        )
+                    },
+                    onBubbleBlue = vm::setBubbleBlue,
+                    onNotifications = vm::setNotifications,
+                    onPreviews = vm::setPreviews,
+                    onSystemNotifications = {
+                        ctx.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                        )
+                    }
+                )
             }
         }
     }

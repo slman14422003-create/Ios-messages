@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -92,5 +93,34 @@ fun ComposeIcon(color: Color, modifier: Modifier = Modifier) {
         }
         drawPath(box, color, style = Stroke(sw, cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawLine(color, Offset(w * 0.45f, h * 0.56f), Offset(w * 0.86f, h * 0.15f), sw * 1.3f, StrokeCap.Round)
+    }
+}
+
+@Composable
+fun CheckMark(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(16.dp)) {
+        val sw = size.width * 0.14f
+        val path = Path().apply {
+            moveTo(size.width * 0.12f, size.height * 0.54f)
+            lineTo(size.width * 0.40f, size.height * 0.80f)
+            lineTo(size.width * 0.88f, size.height * 0.20f)
+        }
+        drawPath(path, color, style = Stroke(sw, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+@Composable
+fun GearIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val c = center
+        val w = size.width
+        val sw = 1.9.dp.toPx()
+        drawCircle(color, radius = w * 0.26f, center = c, style = Stroke(sw))
+        drawCircle(color, radius = w * 0.09f, center = c, style = Stroke(sw))
+        for (i in 0 until 8) {
+            rotate(i * 45f, c) {
+                drawLine(color, Offset(c.x, c.y - w * 0.33f), Offset(c.x, c.y - w * 0.46f), sw * 1.7f, StrokeCap.Round)
+            }
+        }
     }
 }

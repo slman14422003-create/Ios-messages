@@ -6,7 +6,8 @@ data class Conversation(
     val name: String,
     val snippet: String,
     val date: Long,
-    val unread: Int
+    val unread: Int,
+    val known: Boolean = true
 )
 
 data class Message(
@@ -15,4 +16,10 @@ data class Message(
     val date: Long,
     val mine: Boolean,
     val read: Boolean
+)
+
+data class Contact(
+    val id: Long,
+    val name: String,
+    val number: String
 )
