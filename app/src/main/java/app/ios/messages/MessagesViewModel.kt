@@ -166,7 +166,10 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeChat() {
         openThread = null
-        _messages.value = emptyList()
+    }
+
+    fun clearMessages() {
+        if (openThread == null) _messages.value = emptyList()
     }
 
     fun send(address: String, body: String, onThread: (Long) -> Unit) {

@@ -32,8 +32,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -50,6 +48,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -114,8 +115,13 @@ fun ConversationsScreen(
     }
 
     val listState = rememberLazyListState()
-    val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex >= 1 } }
-    val barAlpha by animateFloatAsState(if (collapsed) 1f else 0f, tween(150), label = "bar")
+    val collapsePx = with(LocalDensity.current) { 52.dp.toPx() }
+    val collapse by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex >= 1) 1f
+            else (listState.firstVisibleItemScrollOffset / collapsePx).coerceIn(0f, 1f)
+        }
+    }
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -264,7 +270,7 @@ fun ConversationsScreen(
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .background(p.bar.copy(alpha = p.bar.alpha * barAlpha))
+                .drawBehind { drawRect(p.bar.copy(alpha = p.bar.alpha * collapse)) }
                 .statusBarsPadding()
         ) {
             Box(Modifier.fillMaxWidth().height(44.dp)) {
@@ -278,13 +284,13 @@ fun ConversationsScreen(
                             .dimClickable { if (selecting) endSelecting() else editMenu = true }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     )
-                    DropdownMenu(expanded = editMenu, onDismissRequest = { editMenu = false }) {
-                        DropdownMenuItem(
+                    IosMenu(expanded = editMenu, onDismissRequest = { editMenu = false }) {
+                        IosMenuItem(
                             text = { Text("Select Messages") },
                             onClick = { editMenu = false; selecting = true; selected = emptySet() }
                         )
                         listOf("All Messages", "Unread Messages", "Unknown Senders").forEachIndexed { i, label ->
-                            DropdownMenuItem(
+                            IosMenuItem(
                                 text = { Text(label) },
                                 onClick = { filterIdx = i; editMenu = false },
                                 trailingIcon = { if (filterIdx == i) CheckMark(p.blue, Modifier.size(16.dp)) }
@@ -297,7 +303,7 @@ fun ConversationsScreen(
                     color = p.label,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.align(Alignment.Center).alpha(barAlpha)
+                    modifier = Modifier.align(Alignment.Center).graphicsLayer { alpha = collapse }
                 )
                 if (!selecting) {
                     Row(
@@ -317,7 +323,7 @@ fun ConversationsScreen(
                     }
                 }
             }
-            Hairline(Modifier.alpha(barAlpha))
+            Hairline(Modifier.graphicsLayer { alpha = collapse })
         }
 
         if (selecting) {
@@ -376,23 +382,23 @@ private fun RowMenu(
     onMarkRead: () -> Unit,
     onDelete: () -> Unit
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        DropdownMenuItem(
+    IosMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        IosMenuItem(
             text = { Text(if (isPinned) "Unpin" else "Pin") },
             onClick = { onTogglePin(); onDismiss() }
         )
-        DropdownMenuItem(
+        IosMenuItem(
             text = { Text(if (isMuted) "Show Alerts" else "Hide Alerts") },
             onClick = { onToggleMute(); onDismiss() }
         )
         if (c.unread > 0) {
-            DropdownMenuItem(
+            IosMenuItem(
                 text = { Text("Mark as Read") },
                 onClick = { onMarkRead(); onDismiss() }
             )
         }
         if (isDefault) {
-            DropdownMenuItem(
+            IosMenuItem(
                 text = { Text("Delete", color = Red) },
                 onClick = { onDelete(); onDismiss() }
             )

@@ -150,8 +150,9 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     LaunchedEffect(chat != null) {
         progress.animateTo(
             if (chat != null) 1f else 0f,
-            spring(dampingRatio = 1f, stiffness = 320f)
+            spring(dampingRatio = 1f, stiffness = 260f)
         )
+        if (chat == null) vm.clearMessages()
     }
     val chatVisible by remember { derivedStateOf { progress.value > 0.001f } }
 
@@ -159,7 +160,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     LaunchedEffect(settingsOpen) {
         settingsProgress.animateTo(
             if (settingsOpen) 1f else 0f,
-            spring(dampingRatio = 1f, stiffness = 320f)
+            spring(dampingRatio = 1f, stiffness = 260f)
         )
     }
     val settingsVisible by remember { derivedStateOf { settingsProgress.value > 0.001f } }
@@ -337,7 +338,7 @@ private fun EdgeSwipeBack(
             .fillMaxHeight()
             .width(12.dp)
             .pointerInput(Unit) {
-                val settle = spring<Float>(dampingRatio = 1f, stiffness = 320f)
+                val settle = spring<Float>(dampingRatio = 1f, stiffness = 260f)
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         if (progress.value < 0.55f) commit()

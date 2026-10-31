@@ -2,6 +2,9 @@ package app.ios.messages.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -89,8 +92,9 @@ fun IMessageTheme(sent: Color = SentBubble, content: @Composable () -> Unit) {
         LocalSentColor provides sent
     ) {
         MaterialTheme(
-            colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
-            content = content
-        )
+            colorScheme = if (dark) darkColorScheme() else lightColorScheme()
+        ) {
+            ProvideTextStyle(TextStyle(letterSpacing = (-0.2).sp)) { content() }
+        }
     }
 }

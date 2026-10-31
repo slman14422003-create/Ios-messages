@@ -6,6 +6,8 @@ import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -43,6 +45,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -53,8 +56,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -151,7 +152,8 @@ fun ChatScreen(
     var text by rememberSaveable { mutableStateOf("") }
     val rev = remember(messages) { buildItems(messages).asReversed() }
     val listState = rememberLazyListState()
-    var inputH by remember { mutableIntStateOf(0) }
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val barH = 94.dp
     val tick = rememberTick()
@@ -160,7 +162,18 @@ fun ChatScreen(
     val revealPx = with(density) { 64.dp.toPx() }
 
     val newestKey = rev.firstOrNull()?.key
-    LaunchedEffect(newestKey) { if (rev.isNotEmpty()) listState.animateScrollToItem(0) }
+    var listReady by remember { mutableStateOf(false) }
+    LaunchedEffect(newestKey) {
+        if (rev.isNotEmpty()) {
+            if (listReady) listState.animateScrollToItem(0) else listState.scrollToItem(0)
+        }
+    }
+    LaunchedEffect(rev.isNotEmpty()) { if (rev.isNotEmpty()) listReady = true }
+    val listAlpha by animateFloatAsState(
+        if (rev.isEmpty()) 0f else 1f,
+        tween(240),
+        label = "list"
+    )
 
     Box(Modifier.fillMaxSize().background(p.bg).imePadding()) {
         LazyColumn(
@@ -168,6 +181,7 @@ fun ChatScreen(
             reverseLayout = true,
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer { alpha = listAlpha }
                 .pointerInput(Unit) {
                     val back = spring<Float>(dampingRatio = 0.8f, stiffness = 380f)
                     detectHorizontalDragGestures(
@@ -192,7 +206,7 @@ fun ChatScreen(
                         isDefault,
                         onDeleteMessage,
                         { reveal.value },
-                        Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f))
+                        if (listReady) Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f)) else Modifier
                     )
                     is ChatItem.Status -> Text(
                         item.text,
@@ -227,8 +241,8 @@ fun ChatScreen(
                         onClick = onBack
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
                     Box(Modifier.align(Alignment.BottomCenter)) {
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(
+                        IosMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            IosMenuItem(
                                 text = { Text("Call") },
                                 onClick = {
                                     menu = false
@@ -237,7 +251,7 @@ fun ChatScreen(
                                     }
                                 }
                             )
-                            DropdownMenuItem(
+                            IosMenuItem(
                                 text = { Text("Add to Contacts") },
                                 onClick = {
                                     menu = false
@@ -251,7 +265,7 @@ fun ChatScreen(
                                     }
                                 }
                             )
-                            DropdownMenuItem(
+                            IosMenuItem(
                                 text = { Text("Copy Number") },
                                 onClick = {
                                     menu = false
@@ -405,12 +419,12 @@ private fun BubbleRow(
                         }
                         .padding(start = padStart, end = padEnd, top = 7.dp, bottom = 7.dp)
                 )
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(
+                IosMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    IosMenuItem(
                         text = { Text("Copy") },
                         onClick = { clipboard.setText(AnnotatedString(b.m.body)); menu = false }
                     )
-                    DropdownMenuItem(
+                    IosMenuItem(
                         text = { Text("Share") },
                         onClick = {
                             menu = false
@@ -428,7 +442,7 @@ private fun BubbleRow(
                         }
                     )
                     if (isDefault) {
-                        DropdownMenuItem(
+                        IosMenuItem(
                             text = { Text("Delete", color = Red) },
                             onClick = { onDelete(b.m.id); menu = false }
                         )

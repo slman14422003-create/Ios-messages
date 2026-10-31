@@ -6,7 +6,32 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
@@ -202,4 +227,84 @@ fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, co
             .clickable(interactionSource = src, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) { content() }
+}
+
+private class MenuPosition : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize
+    ): IntOffset {
+        val x = (anchorBounds.center.x - popupContentSize.width / 2)
+            .coerceIn(8, maxOf(8, windowSize.width - popupContentSize.width - 8))
+        val below = anchorBounds.bottom - 14
+        val y = if (below + popupContentSize.height <= windowSize.height - 8) below
+        else maxOf(8, anchorBounds.top - popupContentSize.height + 14)
+        return IntOffset(x, y)
+    }
+}
+
+@Composable
+fun IosMenu(expanded: Boolean, onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    if (!expanded) return
+    val dark = isSystemInDarkTheme()
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { a.animateTo(1f, spring(dampingRatio = 0.74f, stiffness = 520f)) }
+    Popup(
+        popupPositionProvider = remember { MenuPosition() },
+        onDismissRequest = onDismissRequest,
+        properties = PopupProperties(focusable = true)
+    ) {
+        val shape = RoundedCornerShape(14.dp)
+        Box(Modifier.padding(20.dp)) {
+            Column(
+                Modifier
+                    .graphicsLayer {
+                        val s = 0.78f + 0.22f * a.value
+                        scaleX = s
+                        scaleY = s
+                        alpha = a.value.coerceIn(0f, 1f)
+                        transformOrigin = TransformOrigin(0.5f, 0f)
+                    }
+                    .shadow(
+                        22.dp,
+                        shape,
+                        ambientColor = Color.Black.copy(alpha = 0.25f),
+                        spotColor = Color.Black.copy(alpha = 0.25f)
+                    )
+                    .clip(shape)
+                    .background(if (dark) Color(0xFF2C2C2E) else Color(0xFFF8F8F8))
+                    .width(IntrinsicSize.Max)
+                    .widthIn(min = 210.dp, max = 300.dp),
+                content = content
+            )
+        }
+    }
+}
+
+@Composable
+fun IosMenuItem(
+    text: @Composable () -> Unit,
+    onClick: () -> Unit,
+    trailingIcon: (@Composable () -> Unit)? = null
+) {
+    val p = LocalPalette.current
+    Box(Modifier.fillMaxWidth().iosClickable(onClick)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 46.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CompositionLocalProvider(LocalContentColor provides p.label) {
+                ProvideTextStyle(TextStyle(fontSize = 17.sp)) {
+                    Box(Modifier.weight(1f)) { text() }
+                }
+            }
+            if (trailingIcon != null) {
+                Spacer(Modifier.width(12.dp))
+                trailingIcon()
+            }
+        }
+        Hairline(Modifier.align(Alignment.BottomStart))
+    }
 }

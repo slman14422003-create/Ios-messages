@@ -1,6 +1,7 @@
 package app.ios.messages.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -139,7 +140,7 @@ fun SettingsScreen(
 
             Section("About") {
                 SettingRow("Version", last = true) {
-                    Text("1.0", color = p.secondary, fontSize = 17.sp)
+                    Text("1.4", color = p.secondary, fontSize = 17.sp)
                 }
             }
         }
@@ -205,7 +206,11 @@ private fun SettingRow(
 private fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
     val track by animateColorAsState(if (checked) SentBubble else p.received, label = "track")
-    val x by animateDpAsState(if (checked) 20.dp else 0.dp, label = "knob")
+    val x by animateDpAsState(
+        if (checked) 20.dp else 0.dp,
+        spring(dampingRatio = 0.62f, stiffness = 520f),
+        label = "knob"
+    )
     Box(
         Modifier
             .width(51.dp)
