@@ -1,6 +1,9 @@
 package app.ios.messages
 
+import android.app.Activity
 import android.app.Service
+import app.ios.messages.data.Mms
+import java.io.File
 import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
@@ -34,9 +37,41 @@ class SmsReceiver : BroadcastReceiver() {
     }
 }
 
-/** Required by the default-SMS-app role. MMS download/parsing is not implemented. */
 class MmsReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {}
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != Telephony.Sms.Intents.WAP_PUSH_DELIVER_ACTION) return
+        val data = intent.getByteArrayExtra("data") ?: return
+        try {
+            Mms.download(context, data)
+        } catch (_: Exception) {
+        }
+    }
+}
+
+class MmsSentReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getLongExtra("mms_id", -1L)
+        if (id < 0) return
+        Mms.setBox(context, id, if (resultCode == Activity.RESULT_OK) 2 else 5)
+        intent.getStringExtra("file")?.let { File(it).delete() }
+    }
+}
+
+class MmsDownloadedReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val path = intent.getStringExtra("file") ?: return
+        val from = intent.getStringExtra("from") ?: ""
+        val ok = resultCode == Activity.RESULT_OK
+        val pending = goAsync()
+        Thread {
+            try {
+                Mms.onDownloaded(context, path, from, ok)?.let { Notifier.show(context, it.first, it.second) }
+            } catch (_: Throwable) {
+            } finally {
+                pending.finish()
+            }
+        }.start()
+    }
 }
 
 /** Required by the default-SMS-app role ("respond via message" from the dialer). */

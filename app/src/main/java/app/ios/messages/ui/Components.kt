@@ -30,6 +30,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.text.style.TextAlign
+import kotlin.math.roundToInt
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.interaction.InteractionSource
@@ -246,9 +252,28 @@ private class MenuPosition : PopupPositionProvider {
 }
 
 @Composable
+private fun MenuCard(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val dark = isSystemInDarkTheme()
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier
+            .shadow(
+                22.dp,
+                shape,
+                ambientColor = Color.Black.copy(alpha = 0.25f),
+                spotColor = Color.Black.copy(alpha = 0.25f)
+            )
+            .clip(shape)
+            .background(if (dark) Color(0xFF2C2C2E) else Color(0xFFF8F8F8))
+            .width(IntrinsicSize.Max)
+            .widthIn(min = 210.dp, max = 300.dp),
+        content = content
+    )
+}
+
+@Composable
 fun IosMenu(expanded: Boolean, onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     if (!expanded) return
-    val dark = isSystemInDarkTheme()
     val a = remember { Animatable(0f) }
     LaunchedEffect(Unit) { a.animateTo(1f, spring(dampingRatio = 0.74f, stiffness = 520f)) }
     Popup(
@@ -256,29 +281,125 @@ fun IosMenu(expanded: Boolean, onDismissRequest: () -> Unit, content: @Composabl
         onDismissRequest = onDismissRequest,
         properties = PopupProperties(focusable = true)
     ) {
-        val shape = RoundedCornerShape(14.dp)
         Box(Modifier.padding(20.dp)) {
-            Column(
-                Modifier
-                    .graphicsLayer {
-                        val s = 0.78f + 0.22f * a.value
-                        scaleX = s
-                        scaleY = s
-                        alpha = a.value.coerceIn(0f, 1f)
-                        transformOrigin = TransformOrigin(0.5f, 0f)
-                    }
-                    .shadow(
-                        22.dp,
-                        shape,
-                        ambientColor = Color.Black.copy(alpha = 0.25f),
-                        spotColor = Color.Black.copy(alpha = 0.25f)
-                    )
-                    .clip(shape)
-                    .background(if (dark) Color(0xFF2C2C2E) else Color(0xFFF8F8F8))
-                    .width(IntrinsicSize.Max)
-                    .widthIn(min = 210.dp, max = 300.dp),
-                content = content
+            MenuCard(
+                Modifier.graphicsLayer {
+                    val s = 0.78f + 0.22f * a.value
+                    scaleX = s
+                    scaleY = s
+                    alpha = a.value.coerceIn(0f, 1f)
+                    transformOrigin = TransformOrigin(0.5f, 0f)
+                },
+                content
             )
+        }
+    }
+}
+
+private object ZeroPosition : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize
+    ): IntOffset = IntOffset.Zero
+}
+
+@Composable
+fun ContextOverlay(
+    bounds: Rect,
+    menuAtEnd: Boolean,
+    previewWidth: Int?,
+    onDismiss: () -> Unit,
+    preview: @Composable () -> Unit,
+    menu: @Composable ColumnScope.() -> Unit
+) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { a.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 420f)) }
+    Popup(
+        popupPositionProvider = ZeroPosition,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true, clippingEnabled = false)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawBehind { drawRect(Color.Black.copy(alpha = 0.42f * a.value)) }
+                .plainClickable(onDismiss)
+        ) {
+            Layout(
+                modifier = Modifier.fillMaxSize(),
+                content = {
+                    Box(
+                        Modifier.graphicsLayer {
+                            val s = 1f + 0.035f * a.value
+                            scaleX = s
+                            scaleY = s
+                        }
+                    ) { preview() }
+                    MenuCard(
+                        Modifier.graphicsLayer {
+                            val s = 0.7f + 0.3f * a.value
+                            scaleX = s
+                            scaleY = s
+                            alpha = a.value.coerceIn(0f, 1f)
+                            transformOrigin = TransformOrigin(if (menuAtEnd) 1f else 0f, 0f)
+                        },
+                        menu
+                    )
+                }
+            ) { ms, c ->
+                val loose = c.copy(minWidth = 0, minHeight = 0)
+                val pc = if (previewWidth != null) loose.copy(minWidth = previewWidth, maxWidth = previewWidth) else loose
+                val pv = ms[0].measure(pc)
+                val mn = ms[1].measure(loose)
+                val gap = 10.dp.roundToPx()
+                val margin = 12.dp.roundToPx()
+                val maxTop = c.maxHeight - margin - pv.height - gap - mn.height
+                val top = minOf(bounds.top.roundToInt(), maxTop).coerceAtLeast(margin * 2)
+                val left = bounds.left.roundToInt().coerceIn(0, maxOf(0, c.maxWidth - pv.width))
+                val rawX = if (menuAtEnd) left + pv.width - mn.width else left
+                val mx = rawX.coerceIn(margin, maxOf(margin, c.maxWidth - mn.width - margin))
+                layout(c.maxWidth, c.maxHeight) {
+                    pv.place(left, top)
+                    mn.place(mx, top + pv.height + gap)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val dark = isSystemInDarkTheme()
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (dark) Color(0xFF2C2C2E) else Color(0xFFF2F2F2)),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                title,
+                color = p.label,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)
+            )
+            Hairline()
+            Row(Modifier.fillMaxWidth().height(48.dp)) {
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().iosClickable(onDismiss),
+                    contentAlignment = Alignment.Center
+                ) { Text("Cancel", color = p.blue, fontSize = 17.sp) }
+                Box(Modifier.width(Dp.Hairline).fillMaxHeight().background(p.separator))
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().iosClickable(onConfirm),
+                    contentAlignment = Alignment.Center
+                ) { Text(confirmLabel, color = Red, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+            }
         }
     }
 }

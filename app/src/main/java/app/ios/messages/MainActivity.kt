@@ -27,6 +27,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -148,6 +152,14 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     // so the animation never triggers recomposition.
     val progress = remember { Animatable(if (chat != null) 1f else 0f) }
     LaunchedEffect(chat != null) {
+        if (chat != null) {
+            if (chat?.address != null || chat?.threadId != null) {
+                withTimeoutOrNull(260) { snapshotFlow { messages.isNotEmpty() }.first { it } }
+            }
+            withFrameNanos { }
+            withFrameNanos { }
+            withFrameNanos { }
+        }
         progress.animateTo(
             if (chat != null) 1f else 0f,
             spring(dampingRatio = 1f, stiffness = 260f)
@@ -249,8 +261,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                                 chat = null
                                 vm.closeChat()
                             },
-                            onSend = { addr, body ->
-                                vm.send(addr, body) { tid ->
+                            onSend = { addr, body, att ->
+                                vm.send(addr, body, att) { tid ->
                                     chat = ChatTarget(tid, addr, vm.nameFor(addr))
                                 }
                             },

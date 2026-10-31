@@ -55,6 +55,11 @@ class SmsRepository(private val ctx: Context) {
         val unread = HashMap<Long, Int>()
         cr.query(smsUri, arrayOf("thread_id"), "read=0 AND type=1", null, null)
             ?.use { c -> while (c.moveToNext()) { val t = c.getLong(0); unread[t] = (unread[t] ?: 0) + 1 } }
+        try {
+            cr.query(Uri.parse("content://mms"), arrayOf("thread_id"), "read=0 AND msg_box=1 AND m_type=132", null, null)
+                ?.use { c -> while (c.moveToNext()) { val t = c.getLong(0); unread[t] = (unread[t] ?: 0) + 1 } }
+        } catch (_: Exception) {
+        }
         val out = ArrayList<Conversation>()
         cr.query(
             Uri.parse("content://mms-sms/conversations?simple=true"),
@@ -68,7 +73,7 @@ class SmsRepository(private val ctx: Context) {
                 if (list.isEmpty()) continue
                 out += Conversation(
                     tid, list[0], list.joinToString(", ") { contactName(it) ?: it },
-                    c.getString(3) ?: "", c.getLong(1), unread[tid] ?: 0,
+                    (c.getString(3) ?: "").ifBlank { "Attachment" }, c.getLong(1), unread[tid] ?: 0,
                     contactName(list[0]) != null
                 )
             }
@@ -148,8 +153,47 @@ class SmsRepository(private val ctx: Context) {
                 )
             }
         }
-        out.reverse()
+        try {
+            mmsMessages(threadId, out)
+        } catch (_: Exception) {
+        }
+        out.sortBy { it.date }
         return out
+    }
+
+    private fun mmsMessages(threadId: Long, out: MutableList<Message>) {
+        cr.query(
+            Uri.parse("content://mms"),
+            arrayOf("_id", "date", "msg_box", "read"),
+            "thread_id=? AND (m_type=128 OR m_type=132)", arrayOf(threadId.toString()), "date DESC LIMIT 100"
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val id = c.getLong(0)
+                val texts = ArrayList<String>()
+                val images = ArrayList<String>()
+                cr.query(
+                    Uri.parse("content://mms/part"),
+                    arrayOf("_id", "ct", "text"),
+                    "mid=?", arrayOf(id.toString()), null
+                )?.use { pc ->
+                    while (pc.moveToNext()) {
+                        val ct = pc.getString(1) ?: ""
+                        when {
+                            ct == "text/plain" -> pc.getString(2)?.let { texts += it }
+                            ct.startsWith("image/") -> images += "content://mms/part/" + pc.getLong(0)
+                        }
+                    }
+                }
+                out += Message(
+                    id = -id,
+                    body = texts.joinToString("\n"),
+                    date = c.getLong(1) * 1000L,
+                    mine = c.getInt(2) != 1,
+                    read = c.getInt(3) != 0,
+                    images = images
+                )
+            }
+        }
     }
 
     fun threadIdFor(address: String): Long = Telephony.Threads.getOrCreateThreadId(ctx, address)
@@ -178,6 +222,10 @@ class SmsRepository(private val ctx: Context) {
         }
     }
 
+    fun sendMms(address: String, body: String, image: Uri?) {
+        Mms.send(ctx, address, body, image)
+    }
+
     fun markRead(threadId: Long) {
         if (!isDefault()) return
         val v = ContentValues().apply { put("read", 1); put("seen", 1) }
@@ -185,12 +233,16 @@ class SmsRepository(private val ctx: Context) {
             cr.update(smsUri, v, "thread_id=? AND read=0", arrayOf(threadId.toString()))
         } catch (_: Exception) {
         }
+        try {
+            cr.update(Uri.parse("content://mms"), v, "thread_id=? AND read=0", arrayOf(threadId.toString()))
+        } catch (_: Exception) {
+        }
     }
 
     fun deleteThread(threadId: Long) {
         if (!isDefault()) return
         try {
-            cr.delete(smsUri, "thread_id=?", arrayOf(threadId.toString()))
+            cr.delete(Uri.parse("content://mms-sms/conversations/$threadId"), null, null)
         } catch (_: Exception) {
         }
     }
@@ -198,7 +250,8 @@ class SmsRepository(private val ctx: Context) {
     fun deleteMessage(id: Long) {
         if (!isDefault()) return
         try {
-            cr.delete(Uri.parse("content://sms/$id"), null, null)
+            if (id < 0) cr.delete(Uri.parse("content://mms/${-id}"), null, null)
+            else cr.delete(Uri.parse("content://sms/$id"), null, null)
         } catch (_: Exception) {
         }
     }

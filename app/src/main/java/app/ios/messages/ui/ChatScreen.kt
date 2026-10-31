@@ -24,7 +24,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -139,7 +148,7 @@ fun ChatScreen(
     messages: List<Message>,
     isDefault: Boolean,
     onBack: () -> Unit,
-    onSend: (address: String, body: String) -> Unit,
+    onSend: (address: String, body: String, attachment: String?) -> Unit,
     onDeleteMessage: (Long) -> Unit
 ) {
     val p = LocalPalette.current
@@ -150,6 +159,11 @@ fun ChatScreen(
     var menu by remember { mutableStateOf(false) }
     val name = target.name ?: target.address ?: ""
     var text by rememberSaveable { mutableStateOf("") }
+    var attach by rememberSaveable { mutableStateOf<String?>(null) }
+    var viewing by remember { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) attach = uri.toString()
+    }
     val rev = remember(messages) { buildItems(messages).asReversed() }
     val listState = rememberLazyListState()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -206,6 +220,7 @@ fun ChatScreen(
                         isDefault,
                         onDeleteMessage,
                         { reveal.value },
+                        { viewing = it },
                         if (listReady) Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f)) else Modifier
                     )
                     is ChatItem.Status -> Text(
@@ -298,21 +313,24 @@ fun ChatScreen(
             }
         }
 
+        viewing?.let { ImageViewer(it) { viewing = null } }
+
         Box(Modifier.align(Alignment.BottomCenter)) {
             InputBar(
                 text = text,
+                attach = attach,
                 onChange = { text = it },
                 onHeight = { inputH = it },
-                onPlus = {
-                    Toast.makeText(ctx, "Attachments (MMS) aren't supported yet", Toast.LENGTH_SHORT).show()
-                },
+                onPlus = { picker.launch("image/*") },
+                onClearAttach = { attach = null },
                 onSend = {
                     val body = text.trim()
                     val addr = address
-                    if (body.isNotEmpty() && addr.isNotEmpty()) {
+                    if ((body.isNotEmpty() || attach != null) && addr.isNotEmpty()) {
                         tick()
-                        onSend(addr, body)
+                        onSend(addr, body, attach)
                         text = ""
+                        attach = null
                     }
                 }
             )
@@ -338,70 +356,53 @@ private fun TimeHeader(t: ChatItem.Time) {
 }
 
 @Composable
-private fun BubbleRow(
+private fun BubbleContent(
     b: ChatItem.Bubble,
-    isDefault: Boolean,
-    onDelete: (Long) -> Unit,
-    reveal: () -> Float,
-    modifier: Modifier
+    maxW: Dp,
+    interactive: Boolean,
+    onLongPress: () -> Unit,
+    onImage: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val p = LocalPalette.current
     val sent = LocalSentColor.current
     val mine = b.m.mine
     val ctx = LocalContext.current
-    val clipboard = LocalClipboardManager.current
-    val thud = rememberThud()
-    var menu by remember { mutableStateOf(false) }
-    val maxW = (LocalConfiguration.current.screenWidthDp * 0.76f).dp
     val shape = remember(mine, b.tail) { BubbleShape(mine, b.tail) }
     val linkColor = if (mine) Color.White else p.blue
     val annotated = remember(b.m.body, linkColor) { linkify(b.m.body, linkColor) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val timeLabel = remember(b.m.date) { DateFmt.time(b.m.date) }
-    val appear = remember { Animatable(if (System.currentTimeMillis() - b.m.date < 4000L) 0f else 1f) }
-    LaunchedEffect(Unit) {
-        if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f))
-    }
-    val shiftPx = with(LocalDensity.current) { 56.dp.toPx() }
     val padStart = if (mine) 12.dp else 18.dp
     val padEnd = if (mine) 18.dp else 12.dp
-
-    Box(modifier.fillMaxWidth()) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .graphicsLayer { translationX = -reveal() * shiftPx }
-                .padding(top = if (b.tight) 2.dp else 9.dp, start = 8.dp, end = 8.dp),
-            contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart
-        ) {
-            Box(
-                Modifier.graphicsLayer {
-                    val v = appear.value
-                    val s = 0.6f + 0.4f * v
-                    scaleX = s
-                    scaleY = s
-                    alpha = v.coerceIn(0f, 1f)
-                    translationY = (1f - v) * 14.dp.toPx()
-                    transformOrigin = TransformOrigin(if (mine) 1f else 0f, 1f)
-                }
-            ) {
-                Text(
-                    text = annotated,
-                    onTextLayout = { layout = it },
-                    color = if (mine) Color.White else p.receivedText,
-                    fontSize = 17.sp,
-                    lineHeight = 22.sp,
-                    modifier = Modifier
-                        .widthIn(max = maxW)
-                        .background(if (mine) sent else p.received, shape)
-                        .pointerInput(annotated) {
+    val hasText = b.m.body.isNotBlank()
+    Column(modifier, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+        b.m.images.forEachIndexed { i, uri ->
+            if (i > 0) Spacer(Modifier.height(2.dp))
+            MmsImage(
+                uri,
+                maxW,
+                if (interactive) Modifier.pointerInput(uri) {
+                    detectTapGestures(onLongPress = { onLongPress() }, onTap = { onImage(uri) })
+                } else Modifier
+            )
+        }
+        if (hasText) {
+            if (b.m.images.isNotEmpty()) Spacer(Modifier.height(2.dp))
+            Text(
+                text = annotated,
+                onTextLayout = { layout = it },
+                color = if (mine) Color.White else p.receivedText,
+                fontSize = 17.sp,
+                lineHeight = 22.sp,
+                modifier = Modifier
+                    .widthIn(max = maxW)
+                    .background(if (mine) sent else p.received, shape)
+                    .then(
+                        if (interactive) Modifier.pointerInput(annotated) {
                             val ox = padStart.toPx()
                             val oy = 7.dp.toPx()
                             detectTapGestures(
-                                onLongPress = {
-                                    thud()
-                                    menu = true
-                                },
+                                onLongPress = { onLongPress() },
                                 onTap = { pos ->
                                     val l = layout ?: return@detectTapGestures
                                     val off = l.getOffsetForPosition(Offset(pos.x - ox, pos.y - oy))
@@ -416,38 +417,69 @@ private fun BubbleRow(
                                     }
                                 }
                             )
-                        }
-                        .padding(start = padStart, end = padEnd, top = 7.dp, bottom = 7.dp)
-                )
-                IosMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    IosMenuItem(
-                        text = { Text("Copy") },
-                        onClick = { clipboard.setText(AnnotatedString(b.m.body)); menu = false }
+                        } else Modifier
                     )
-                    IosMenuItem(
-                        text = { Text("Share") },
-                        onClick = {
-                            menu = false
-                            runCatching {
-                                ctx.startActivity(
-                                    Intent.createChooser(
-                                        Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_TEXT, b.m.body)
-                                        },
-                                        null
-                                    )
-                                )
-                            }
-                        }
-                    )
-                    if (isDefault) {
-                        IosMenuItem(
-                            text = { Text("Delete", color = Red) },
-                            onClick = { onDelete(b.m.id); menu = false }
-                        )
+                    .padding(start = padStart, end = padEnd, top = 7.dp, bottom = 7.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BubbleRow(
+    b: ChatItem.Bubble,
+    isDefault: Boolean,
+    onDelete: (Long) -> Unit,
+    reveal: () -> Float,
+    onImage: (String) -> Unit,
+    modifier: Modifier
+) {
+    val p = LocalPalette.current
+    val mine = b.m.mine
+    val ctx = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val thud = rememberThud()
+    var menu by remember { mutableStateOf(false) }
+    val maxW = (LocalConfiguration.current.screenWidthDp * 0.76f).dp
+    val boundsRef = remember { arrayOfNulls<Rect>(1) }
+    val timeLabel = remember(b.m.date) { DateFmt.time(b.m.date) }
+    val appear = remember { Animatable(if (System.currentTimeMillis() - b.m.date < 4000L) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f))
+    }
+    val shiftPx = with(LocalDensity.current) { 56.dp.toPx() }
+
+    Box(modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer { translationX = -reveal() * shiftPx }
+                .padding(top = if (b.tight) 2.dp else 9.dp, start = 8.dp, end = 8.dp),
+            contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart
+        ) {
+            Box(
+                Modifier
+                    .graphicsLayer {
+                        val v = appear.value
+                        val s = 0.6f + 0.4f * v
+                        scaleX = s
+                        scaleY = s
+                        alpha = v.coerceIn(0f, 1f)
+                        translationY = (1f - v) * 14.dp.toPx()
+                        transformOrigin = TransformOrigin(if (mine) 1f else 0f, 1f)
                     }
-                }
+                    .onGloballyPositioned { boundsRef[0] = it.boundsInWindow() }
+            ) {
+                BubbleContent(
+                    b = b,
+                    maxW = maxW,
+                    interactive = true,
+                    onLongPress = {
+                        thud()
+                        menu = true
+                    },
+                    onImage = onImage
+                )
             }
         }
         Text(
@@ -461,21 +493,90 @@ private fun BubbleRow(
                 .graphicsLayer { alpha = reveal() }
         )
     }
+
+    val r = boundsRef[0]
+    if (menu && r != null) {
+        ContextOverlay(
+            bounds = r,
+            menuAtEnd = mine,
+            previewWidth = null,
+            onDismiss = { menu = false },
+            preview = { BubbleContent(b, maxW, false, {}, {}) }
+        ) {
+            IosMenuItem(
+                text = { Text("Copy") },
+                onClick = {
+                    menu = false
+                    clipboard.setText(AnnotatedString(b.m.body))
+                }
+            )
+            IosMenuItem(
+                text = { Text("Share") },
+                onClick = {
+                    menu = false
+                    runCatching {
+                        ctx.startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, b.m.body)
+                                },
+                                null
+                            )
+                        )
+                    }
+                }
+            )
+            if (isDefault) {
+                IosMenuItem(
+                    text = { Text("Delete", color = Red) },
+                    onClick = {
+                        menu = false
+                        onDelete(b.m.id)
+                    }
+                )
+            }
+        }
+    } else if (menu) {
+        menu = false
+    }
 }
 
-/** Floating iOS 26 style input: glass "+" circle and glass pill, over a soft gradient. */
+@Composable
+private fun ImageViewer(uri: String, onDismiss: () -> Unit) {
+    val bmp = rememberMmsImage(uri, 2048)
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            Modifier.fillMaxSize().background(Color.Black).plainClickable(onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun InputBar(
     text: String,
+    attach: String?,
     onChange: (String) -> Unit,
     onHeight: (Int) -> Unit,
     onPlus: () -> Unit,
+    onClearAttach: () -> Unit,
     onSend: () -> Unit
 ) {
     val p = LocalPalette.current
     val sent = LocalSentColor.current
     val pill = RoundedCornerShape(22.dp)
-    Row(
+    val canSend = text.isNotBlank() || attach != null
+    Column(
         Modifier
             .fillMaxWidth()
             .onSizeChanged { onHeight(it.height) }
@@ -487,56 +588,95 @@ private fun InputBar(
                 )
             )
             .navigationBarsPadding()
-            .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.Bottom
     ) {
-        GlassCircle(44.dp, onClick = onPlus) { PlusIcon(p.secondary) }
-        Spacer(Modifier.width(10.dp))
-        Box(
-            Modifier
-                .weight(1f)
-                .heightIn(min = 44.dp)
-                .clip(pill)
-                .background(p.glass)
-                .border(Dp.Hairline, p.separator, pill)
+        AnimatedVisibility(
+            visible = attach != null,
+            enter = fadeIn() + scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f)),
+            exit = fadeOut() + scaleOut(targetScale = 0.8f)
         ) {
-            BasicTextField(
-                value = text,
-                onValueChange = onChange,
-                maxLines = 6,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                textStyle = TextStyle(fontSize = 17.sp, color = p.label, lineHeight = 22.sp),
-                cursorBrush = SolidColor(p.blue),
-                decorationBox = { inner ->
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .padding(start = 16.dp, end = 6.dp, top = 11.dp, bottom = 11.dp)
-                        ) {
-                            if (text.isEmpty()) Text("Text Message", color = p.secondary, fontSize = 17.sp)
-                            inner()
-                        }
-                        AnimatedVisibility(
-                            visible = text.isNotBlank(),
-                            enter = fadeIn() + scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)),
-                            exit = fadeOut() + scaleOut(targetScale = 0.5f)
-                        ) {
-                            val src = remember { MutableInteractionSource() }
-                            Box(
-                                Modifier
-                                    .padding(end = 5.dp, bottom = 5.dp)
-                                    .size(34.dp)
-                                    .pressScale(src, 0.84f)
-                                    .clip(CircleShape)
-                                    .background(sent)
-                                    .clickable(interactionSource = src, indication = null, onClick = onSend),
-                                contentAlignment = Alignment.Center
-                            ) { SendArrow(Color.White) }
-                        }
+            val bmp = if (attach != null) rememberMmsImage(attach, 400) else null
+            Box(Modifier.padding(start = 66.dp, top = 14.dp, bottom = 2.dp)) {
+                Box(
+                    Modifier
+                        .size(84.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(p.received)
+                ) {
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
-            )
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .plainClickable(onClearAttach),
+                    contentAlignment = Alignment.Center
+                ) { Text("\u00D7", color = Color.White, fontSize = 15.sp) }
+            }
+        }
+        Row(
+            Modifier.padding(start = 12.dp, end = 12.dp, top = if (attach != null) 6.dp else 14.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            GlassCircle(44.dp, onClick = onPlus) { PlusIcon(p.secondary) }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp)
+                    .clip(pill)
+                    .background(p.glass)
+                    .border(Dp.Hairline, p.separator, pill)
+            ) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = onChange,
+                    maxLines = 6,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    textStyle = TextStyle(fontSize = 17.sp, color = p.label, lineHeight = 22.sp),
+                    cursorBrush = SolidColor(p.blue),
+                    decorationBox = { inner ->
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .padding(start = 16.dp, end = 6.dp, top = 11.dp, bottom = 11.dp)
+                            ) {
+                                if (text.isEmpty()) {
+                                    Text(if (attach != null) "Add Caption" else "Text Message", color = p.secondary, fontSize = 17.sp)
+                                }
+                                inner()
+                            }
+                            AnimatedVisibility(
+                                visible = canSend,
+                                enter = fadeIn() + scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)),
+                                exit = fadeOut() + scaleOut(targetScale = 0.5f)
+                            ) {
+                                val src = remember { MutableInteractionSource() }
+                                Box(
+                                    Modifier
+                                        .padding(end = 5.dp, bottom = 5.dp)
+                                        .size(34.dp)
+                                        .pressScale(src, 0.84f)
+                                        .clip(CircleShape)
+                                        .background(sent)
+                                        .clickable(interactionSource = src, indication = null, onClick = onSend),
+                                    contentAlignment = Alignment.Center
+                                ) { SendArrow(Color.White) }
+                            }
+                        }
+                    }
+                )
+            }
         }
     }
 }

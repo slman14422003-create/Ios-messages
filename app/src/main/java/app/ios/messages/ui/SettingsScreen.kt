@@ -140,7 +140,7 @@ fun SettingsScreen(
 
             Section("About") {
                 SettingRow("Version", last = true) {
-                    Text("1.4", color = p.secondary, fontSize = 17.sp)
+                    Text("1.5", color = p.secondary, fontSize = 17.sp)
                 }
             }
         }

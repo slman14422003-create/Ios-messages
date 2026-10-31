@@ -64,6 +64,19 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".MmsSentReceiver" android:exported="false" />
+        <receiver android:name=".MmsDownloadedReceiver" android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <service
             android:name=".HeadlessSmsSendService"
             android:exported="true"

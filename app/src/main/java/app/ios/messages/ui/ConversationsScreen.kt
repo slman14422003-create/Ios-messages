@@ -48,6 +48,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlin.math.roundToInt
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -91,6 +95,8 @@ fun ConversationsScreen(
     var rowMenu by remember { mutableStateOf<Long?>(null) }
     val thud = rememberThud()
     val tick = rememberTick()
+    var confirmDelete by remember { mutableStateOf<List<Long>?>(null) }
+    val rowBounds = remember { HashMap<Long, Rect>() }
 
     val filtered = remember(conversations, filterIdx, query) {
         conversations.filter { c ->
@@ -182,7 +188,7 @@ fun ConversationsScreen(
                                                 onToggleMute = { onToggleMute(c.threadId) },
                                                 onTogglePin = { onTogglePin(c.threadId) },
                                                 onMarkRead = { onMarkRead(listOf(c.threadId)) },
-                                                onDelete = { onDelete(listOf(c.threadId)) }
+                                                onDelete = { confirmDelete = listOf(c.threadId) }
                                             )
                                         }
                                     )
@@ -197,10 +203,12 @@ fun ConversationsScreen(
 
             items(rest, key = { it.threadId }) { c ->
                 val state = rememberSwipeToDismissBoxState(
+                    positionalThreshold = { it * 0.5f },
                     confirmValueChange = { v ->
                         when {
-                            v == SwipeToDismissBoxValue.EndToStart && isDefault -> {
-                                onDelete(listOf(c.threadId)); true
+                            v == SwipeToDismissBoxValue.EndToStart -> {
+                                if (isDefault) confirmDelete = listOf(c.threadId)
+                                false
                             }
                             v == SwipeToDismissBoxValue.StartToEnd -> {
                                 tick(); onTogglePin(c.threadId); false
@@ -232,7 +240,11 @@ fun ConversationsScreen(
                         }
                     }
                 ) {
-                    Box(Modifier.background(p.bg)) {
+                    Box(
+                        Modifier
+                            .background(p.bg)
+                            .onGloballyPositioned { rowBounds[c.threadId] = it.boundsInWindow() }
+                    ) {
                         ConversationRow(
                             c = c,
                             selecting = selecting,
@@ -240,14 +252,6 @@ fun ConversationsScreen(
                             muted = c.threadId in muted,
                             onClick = { if (selecting) toggle(c.threadId) else onOpen(c) },
                             onLongClick = { if (!selecting) { thud(); rowMenu = c.threadId } }
-                        )
-                        RowMenu(
-                            c, c.threadId in pinned, c.threadId in muted, isDefault, rowMenu == c.threadId,
-                            onDismiss = { rowMenu = null },
-                            onToggleMute = { onToggleMute(c.threadId) },
-                            onTogglePin = { onTogglePin(c.threadId) },
-                            onMarkRead = { onMarkRead(listOf(c.threadId)) },
-                            onDelete = { onDelete(listOf(c.threadId)) }
                         )
                     }
                 }
@@ -264,6 +268,69 @@ fun ConversationsScreen(
                     )
                 }
             }
+        }
+
+        val menuConv = rowMenu?.let { id -> conversations.firstOrNull { it.threadId == id } }
+        val menuBounds = menuConv?.takeIf { it.threadId !in pinned }?.let { rowBounds[it.threadId] }
+        if (menuConv != null && menuBounds != null) {
+            ContextOverlay(
+                bounds = menuBounds,
+                menuAtEnd = false,
+                previewWidth = menuBounds.width.roundToInt(),
+                onDismiss = { rowMenu = null },
+                preview = {
+                    Box(Modifier.clip(RoundedCornerShape(16.dp)).background(p.bg)) {
+                        ConversationRow(menuConv, false, false, menuConv.threadId in muted, {}, {})
+                    }
+                }
+            ) {
+                IosMenuItem(
+                    text = { Text(if (menuConv.threadId in pinned) "Unpin" else "Pin") },
+                    onClick = {
+                        rowBounds.remove(menuConv.threadId)
+                        rowMenu = null
+                        onTogglePin(menuConv.threadId)
+                    }
+                )
+                IosMenuItem(
+                    text = { Text(if (menuConv.threadId in muted) "Show Alerts" else "Hide Alerts") },
+                    onClick = {
+                        rowMenu = null
+                        onToggleMute(menuConv.threadId)
+                    }
+                )
+                if (menuConv.unread > 0) {
+                    IosMenuItem(
+                        text = { Text("Mark as Read") },
+                        onClick = {
+                            rowMenu = null
+                            onMarkRead(listOf(menuConv.threadId))
+                        }
+                    )
+                }
+                if (isDefault) {
+                    IosMenuItem(
+                        text = { Text("Delete", color = Red) },
+                        onClick = {
+                            rowMenu = null
+                            confirmDelete = listOf(menuConv.threadId)
+                        }
+                    )
+                }
+            }
+        }
+
+        confirmDelete?.let { ids ->
+            IosConfirm(
+                title = if (ids.size > 1) "Delete ${ids.size} conversations?" else "Delete this conversation?",
+                confirmLabel = "Delete",
+                onConfirm = {
+                    onDelete(ids)
+                    confirmDelete = null
+                    endSelecting()
+                },
+                onDismiss = { confirmDelete = null }
+            )
         }
 
         Column(
@@ -357,10 +424,7 @@ fun ConversationsScreen(
                         color = if (canDelete) Red else p.tertiary,
                         fontSize = 17.sp,
                         modifier = Modifier.plainClickable {
-                            if (canDelete) {
-                                onDelete(selected.toList())
-                                endSelecting()
-                            }
+                            if (canDelete) confirmDelete = selected.toList()
                         }
                     )
                 }

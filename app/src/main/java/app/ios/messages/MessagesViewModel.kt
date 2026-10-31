@@ -68,7 +68,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
-        app.contentResolver.registerContentObserver(Uri.parse("content://sms"), true, observer)
+        app.contentResolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
         refresh()
         loadContacts()
     }
@@ -172,10 +172,20 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         if (openThread == null) _messages.value = emptyList()
     }
 
-    fun send(address: String, body: String, onThread: (Long) -> Unit) {
+    fun send(address: String, body: String, attachment: String?, onThread: (Long) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                repo.send(address, body)
+                if (attachment != null) {
+                    if (!repo.isDefault()) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(getApplication(), "Set Messages as default to send photos", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
+                    }
+                    repo.sendMms(address, body, Uri.parse(attachment))
+                } else {
+                    repo.send(address, body)
+                }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(getApplication(), "Not Delivered", Toast.LENGTH_SHORT).show()

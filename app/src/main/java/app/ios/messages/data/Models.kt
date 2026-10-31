@@ -15,7 +15,8 @@ data class Message(
     val body: String,
     val date: Long,
     val mine: Boolean,
-    val read: Boolean
+    val read: Boolean,
+    val images: List<String> = emptyList()
 )
 
 data class Contact(
