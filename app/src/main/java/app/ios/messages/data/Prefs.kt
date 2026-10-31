@@ -17,6 +17,10 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("previews", true)
         set(v) { sp.edit().putBoolean("previews", v).apply() }
 
+    var appearance: Int
+        get() = sp.getInt("appearance", 0)
+        set(v) { sp.edit().putInt("appearance", v).apply() }
+
     var language: String
         get() = sp.getString("language", "system") ?: "system"
         set(v) { sp.edit().putString("language", v).apply() }

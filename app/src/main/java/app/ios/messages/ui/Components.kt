@@ -278,7 +278,7 @@ private fun MenuCard(
     contentAlpha: () -> Float = { 1f },
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDark.current
     val shape = RoundedCornerShape(24.dp)
     Box(
         modifier
@@ -377,7 +377,7 @@ fun ContextOverlay(
         a.animateTo(1f, Motion.menuIn())
     }
     val ready by animateFloatAsState(if (snap != null) 1f else 0f, Motion.fade(220), label = "overlayBlur")
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDark.current
     Popup(
         popupPositionProvider = ZeroPosition,
         onDismissRequest = onDismiss,
@@ -453,7 +453,7 @@ fun ContextOverlay(
 @Composable
 fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val p = LocalPalette.current
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDark.current
     var snap by remember { mutableStateOf<Backdrop?>(null) }
     val host = LocalView.current
     LaunchedEffect(Unit) { snap = captureBackdrop(host) }
@@ -505,7 +505,7 @@ fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDis
 fun Modifier.menuClickable(onClick: () -> Unit): Modifier = composed {
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDark.current
     val base = if (dark) Color(0x30FFFFFF) else Color(0x1C000000)
     val color by animateColorAsState(
         if (pressed) base else base.copy(alpha = 0f),
@@ -584,7 +584,7 @@ fun IosMenuHeader(text: String) {
 
 @Composable
 fun IosMenuDivider() {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDark.current
     Box(
         Modifier
             .fillMaxWidth()

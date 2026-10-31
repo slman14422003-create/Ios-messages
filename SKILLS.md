@@ -115,3 +115,12 @@
 
 ### Not verified
 - No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: Appearance setting (Automatic / Light / Dark) + more visible glass blur (v2.2)
+
+### Done
+- Settings: Appearance section (Automatic, Light, Dark); Prefs.appearance; LocalDark in ui/Theme.kt replaces isSystemInDarkTheme in Components.kt; status/navigation bar icons follow the choice
+- Glass: lighter tint, smaller blur radius, higher saturation so the content behind menus is visible
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails

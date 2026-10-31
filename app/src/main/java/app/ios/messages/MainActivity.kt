@@ -83,9 +83,11 @@ class MainActivity : ComponentActivity() {
 
     private val vm: MessagesViewModel by viewModels()
     private var pendingAddress by mutableStateOf<String?>(null)
+    private var appearance by mutableStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appearance = Prefs(this).appearance
         enableEdgeToEdge()
         val crashFile = java.io.File(filesDir, "crash.txt")
         if (crashFile.exists()) {
@@ -101,8 +103,26 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) pendingAddress = addressFrom(intent)
         setContent {
             val blue by vm.bubbleBlue.collectAsStateWithLifecycle()
-            IMessageTheme(sent = if (blue) IosBlue else SentBubble) {
-                App(vm, pendingAddress, onLanguage = { Prefs(this).language = it; recreate() }) { pendingAddress = null }
+            val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val dark = when (appearance) { 1 -> false; 2 -> true; else -> sysDark }
+            androidx.compose.runtime.DisposableEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle = androidx.activity.SystemBarStyle.auto(
+                        android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT
+                    ) { dark },
+                    navigationBarStyle = androidx.activity.SystemBarStyle.auto(
+                        android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT
+                    ) { dark }
+                )
+                onDispose { }
+            }
+            IMessageTheme(sent = if (blue) IosBlue else SentBubble, appearance = appearance) {
+                App(
+                    vm, pendingAddress,
+                    onLanguage = { Prefs(this).language = it; recreate() },
+                    appearance = appearance,
+                    onAppearance = { appearance = it; Prefs(this).appearance = it }
+                ) { pendingAddress = null }
             }
         }
     }
@@ -139,7 +159,7 @@ private fun requiredPermissions(): Array<String> = buildList {
 }.toTypedArray()
 
 @Composable
-private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (String) -> Unit, onConsumed: () -> Unit) {
+private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (String) -> Unit, appearance: Int, onAppearance: (Int) -> Unit, onConsumed: () -> Unit) {
     val ctx = LocalContext.current
     val language = remember { Prefs(ctx).language }
     val dir = rtlSign()
@@ -370,6 +390,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                     onSaveSim = vm::saveSim,
                     language = language,
                     onLanguage = onLanguage,
+                    appearance = appearance,
+                    onAppearance = onAppearance,
                     onBackup = { backupDialog = true },
                     onRestore = { openLauncher.launch(arrayOf("*/*")) }
                 )

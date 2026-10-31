@@ -81,6 +81,8 @@ fun SettingsScreen(
     onSaveSim: (Int, String, Long) -> Unit = { _, _, _ -> },
     language: String = "system",
     onLanguage: (String) -> Unit = {},
+    appearance: Int = 0,
+    onAppearance: (Int) -> Unit = {},
     onBackup: () -> Unit = {},
     onRestore: () -> Unit = {}
 ) {
@@ -167,6 +169,18 @@ fun SettingsScreen(
                             color = p.secondary,
                             fontSize = 17.sp
                         )
+                    }
+                }
+            }
+
+            Section(stringResource(R.string.appearance)) {
+                listOf(
+                    0 to stringResource(R.string.appearance_auto),
+                    1 to stringResource(R.string.appearance_light),
+                    2 to stringResource(R.string.appearance_dark)
+                ).forEachIndexed { i, (v, label) ->
+                    SettingRow(label, last = i == 2, onClick = { onAppearance(v) }) {
+                        if (appearance == v) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
                     }
                 }
             }

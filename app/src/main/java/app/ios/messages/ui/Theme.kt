@@ -83,12 +83,14 @@ val DarkPalette = Palette(
 )
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }
+val LocalDark = staticCompositionLocalOf { false }
 
 @Composable
-fun IMessageTheme(sent: Color = SentBubble, content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun IMessageTheme(sent: Color = SentBubble, appearance: Int = 0, content: @Composable () -> Unit) {
+    val dark = when (appearance) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
     CompositionLocalProvider(
         LocalPalette provides if (dark) DarkPalette else LightPalette,
+        LocalDark provides dark,
         LocalSentColor provides sent
     ) {
         MaterialTheme(

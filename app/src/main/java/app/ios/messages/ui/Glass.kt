@@ -135,8 +135,8 @@ fun GlassBackdrop(
     snap: Backdrop,
     origin: IntOffset,
     modifier: Modifier,
-    blurDp: Float = 26f,
-    saturation: Float = 1.8f
+    blurDp: Float = 18f,
+    saturation: Float = 2.0f
 ) {
     val d = LocalDensity.current
     val r = with(d) { blurDp.dp.toPx() }
@@ -171,11 +171,11 @@ fun GlassFill(
     origin: IntOffset,
     dark: Boolean,
     modifier: Modifier,
-    blurDp: Float = 26f
+    blurDp: Float = 18f
 ) {
     val ready by animateFloatAsState(if (snap != null) 1f else 0f, Motion.fade(200), label = "glass")
     val opaque = if (dark) Color(0xFF2C2C2E) else Color(0xFFF8F8F8)
-    val tint = if (dark) Color(0xB83A3A3C) else Color(0xB8F7F7F9)
+    val tint = if (dark) Color(0x883A3A3C) else Color(0x92F7F7F9)
     Box(modifier) {
         if (snap != null) GlassBackdrop(snap, origin, Modifier.matchParentSize(), blurDp)
         Box(Modifier.matchParentSize().background(tint))
