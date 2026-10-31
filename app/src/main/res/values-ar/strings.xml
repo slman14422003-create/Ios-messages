@@ -125,4 +125,5 @@
     <string name="backup_wrong_password">كلمة المرور غير صحيحة</string>
     <string name="backup_failed">تعذّر معالجة ملف النسخة الاحتياطية</string>
     <string name="backup_need_default">اجعل الرسائل التطبيق الافتراضي لاستعادة المحادثات</string>
+    <string name="filter_by">تصفية حسب</string>
 </resources>

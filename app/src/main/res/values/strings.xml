@@ -125,4 +125,5 @@
     <string name="backup_wrong_password">Wrong password</string>
     <string name="backup_failed">The backup file could not be processed</string>
     <string name="backup_need_default">Set Messages as default to restore</string>
+    <string name="filter_by">Filter By</string>
 </resources>
