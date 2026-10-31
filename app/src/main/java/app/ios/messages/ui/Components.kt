@@ -450,19 +450,46 @@ fun ContextOverlay(
     }
 }
 
+class AlertAction(
+    val label: String,
+    val bold: Boolean = false,
+    val destructive: Boolean = false,
+    val enabled: Boolean = true,
+    val onClick: () -> Unit
+)
+
 @Composable
 fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    IosAlert(
+        title = title,
+        actions = listOf(
+            AlertAction(stringResource(R.string.cancel), onClick = onDismiss),
+            AlertAction(confirmLabel, bold = true, destructive = true, onClick = onConfirm)
+        ),
+        onDismiss = onDismiss
+    )
+}
+
+/** UIAlertController look: frosted card, centered title/message, optional content, hairline-separated actions. */
+@Composable
+fun IosAlert(
+    title: String,
+    message: String? = null,
+    actions: List<AlertAction>,
+    onDismiss: () -> Unit,
+    content: (@Composable ColumnScope.() -> Unit)? = null
+) {
     val p = LocalPalette.current
     val dark = LocalDark.current
     var snap by remember { mutableStateOf<Backdrop?>(null) }
     val host = LocalView.current
     LaunchedEffect(Unit) { snap = captureBackdrop(host) }
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         val sp = rememberScreenPos()
         val a = remember { Animatable(0f) }
         LaunchedEffect(Unit) { a.animateTo(1f, Motion.menuIn()) }
         val shape = RoundedCornerShape(14.dp)
-        Box(Modifier.screenPos(sp)) {
+        Box(Modifier.screenPos(sp).width(270.dp)) {
             Box(
                 Modifier
                     .graphicsLayer {
@@ -475,29 +502,99 @@ fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDis
             ) {
                 GlassFill(snap, sp.pos, dark, Modifier.matchParentSize(), blurDp = 30f)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        title,
-                        color = p.label,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)
-                    )
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            title,
+                            color = p.label,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        if (message != null) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(message, color = p.label, fontSize = 13.sp, textAlign = TextAlign.Center)
+                        }
+                        if (content != null) {
+                            Spacer(Modifier.height(14.dp))
+                            content()
+                        }
+                    }
                     Hairline()
-                    Row(Modifier.fillMaxWidth().height(48.dp)) {
-                        Box(
-                            Modifier.weight(1f).fillMaxHeight().iosClickable(onDismiss),
-                            contentAlignment = Alignment.Center
-                        ) { Text(stringResource(R.string.cancel), color = p.blue, fontSize = 17.sp) }
-                        Box(Modifier.width(Dp.Hairline).fillMaxHeight().background(p.separator))
-                        Box(
-                            Modifier.weight(1f).fillMaxHeight().iosClickable(onConfirm),
-                            contentAlignment = Alignment.Center
-                        ) { Text(confirmLabel, color = Red, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                    if (actions.size == 2) {
+                        Row(Modifier.fillMaxWidth().height(44.dp)) {
+                            actions.forEachIndexed { i, act ->
+                                if (i > 0) Box(Modifier.width(Dp.Hairline).fillMaxHeight().background(p.separator))
+                                AlertButton(act, Modifier.weight(1f).fillMaxHeight())
+                            }
+                        }
+                    } else {
+                        actions.forEachIndexed { i, act ->
+                            if (i > 0) Hairline()
+                            AlertButton(act, Modifier.fillMaxWidth().height(44.dp))
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AlertButton(act: AlertAction, modifier: Modifier) {
+    val p = LocalPalette.current
+    Box(
+        modifier.then(if (act.enabled) Modifier.iosClickable(act.onClick) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            act.label,
+            color = when {
+                !act.enabled -> p.tertiary
+                act.destructive -> Red
+                else -> p.blue
+            },
+            fontSize = 17.sp,
+            fontWeight = if (act.bold) FontWeight.SemiBold else FontWeight.Normal,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+    }
+}
+
+/** UITextField inside an alert. */
+@Composable
+fun IosField(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    password: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(32.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(p.fieldFill)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = TextStyle(fontSize = 15.sp, color = p.label),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(p.blue),
+            visualTransformation = if (password) androidx.compose.ui.text.input.PasswordVisualTransformation()
+            else androidx.compose.ui.text.input.VisualTransformation.None,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (value.isEmpty()) Text(placeholder, color = p.secondary, fontSize = 15.sp)
     }
 }
 

@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -141,6 +142,11 @@ fun ConversationsScreen(
     }
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val liveTop = remember { LiveBlur() }
+    val liveBottom = remember { LiveBlur() }
+    var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var selBarH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val blurPx = with(LocalDensity.current) { 22.dp.toPx() }
 
     fun toggle(id: Long) {
         selected = if (id in selected) selected - id else selected + id
@@ -154,7 +160,10 @@ fun ConversationsScreen(
     Box(Modifier.fillMaxSize().background(p.bg)) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .liveBlurEdge(liveBottom, true, { selBarH }, { if (selecting) 1f else 0f }, p.bg, p.bar.copy(alpha = 0.7f), blurPx)
+                .liveBlurEdge(liveTop, false, { headerH }, { collapse }, p.bg, p.bar.copy(alpha = 0.7f), blurPx),
             contentPadding = PaddingValues(top = top + 44.dp, bottom = bottom + if (selecting) 56.dp else 0.dp)
         ) {
             item(key = "title") {
@@ -349,7 +358,7 @@ fun ConversationsScreen(
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .drawBehind { drawRect(p.bar.copy(alpha = p.bar.alpha * collapse)) }
+                .onSizeChanged { headerH = it.height.toFloat() }
                 .statusBarsPadding()
         ) {
             Box(Modifier.fillMaxWidth().height(44.dp)) {
@@ -436,7 +445,7 @@ fun ConversationsScreen(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(p.bar)
+                    .onSizeChanged { selBarH = it.height.toFloat() }
                     .navigationBarsPadding()
             ) {
                 Hairline()
@@ -713,3 +722,4 @@ private fun ConversationRow(
 }
 
 private val PinOrange = Color(0xFFFF9F0A)
+

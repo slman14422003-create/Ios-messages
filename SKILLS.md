@@ -124,3 +124,25 @@
 
 ### Not verified
 - No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: Live translucent bars (v2.3)
+
+### Done
+- ui/Glass.kt: LiveBlur + Modifier.liveBlurEdge (RenderNode record of the list, blurred strip redrawn under the bar every frame)
+- ConversationsScreen: top bar blurs live as the list scrolls under it (fades in with the large title collapse); selection bottom bar blurs too
+- ChatScreen: header is a live blur with a soft fade-out edge instead of the solid gradient
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: iOS details everywhere (v2.4)
+
+### Done
+- Icons.kt: GearIcon redrawn as the SF Symbol "gearshape" (8 rounded teeth + hole)
+- Components.kt: IosAlert / IosField / AlertAction (UIAlertController look, stacked buttons for 3+ actions); IosConfirm uses it; all Material AlertDialogs removed (wrong-SIM prompt, SIM rename, backup password)
+- GlassCircle is now translucent (works with the blurred header behind it)
+- Settings: header is a live blur that fades in while scrolling; version row shows the real versionName
+- Chat: bottom input area is a live blur with soft fade instead of a solid gradient; emoji panel has its own background
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails

@@ -240,6 +240,11 @@ private fun ChatScreenBody(
     val itemsCtx = androidx.compose.ui.platform.LocalContext.current
     val rev = remember(messages) { buildItems(itemsCtx, messages).asReversed() }
     val listState = rememberLazyListState()
+    val liveTop = remember { LiveBlur() }
+    val liveBottom = remember { LiveBlur() }
+    var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val blurPx = with(LocalDensity.current) { 22.dp.toPx() }
+    val fadeTail = with(LocalDensity.current) { 16.dp.toPx() }
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -271,6 +276,8 @@ private fun ChatScreenBody(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = listAlpha }
+                .liveBlurEdge(liveBottom, true, { inputH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.45f), blurPx, fade = true)
+                .liveBlurEdge(liveTop, false, { headerH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.45f), blurPx, fade = true)
                 .pointerInput(Unit) {
                     val back = spring<Float>(dampingRatio = 0.8f, stiffness = 380f)
                     detectHorizontalDragGestures(
@@ -344,13 +351,7 @@ private fun ChatScreenBody(
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        0f to p.bg,
-                        0.9f to p.bg.copy(alpha = 0.98f),
-                        1f to p.bg.copy(alpha = 0f)
-                    )
-                )
+                .onSizeChanged { headerH = it.height.toFloat() }
                 .statusBarsPadding()
         ) {
             run {
@@ -478,25 +479,23 @@ private fun ChatScreenBody(
             val a = sims.firstOrNull { it.subId == lastInSub }
             val b = sims.firstOrNull { it.subId == simSel }
             if (a != null && b != null) {
-                AlertDialog(
-                    onDismissRequest = { wrongSim = false },
-                    title = { Text(stringResource(R.string.different_sim)) },
-                    text = { Text(stringResource(R.string.different_sim_msg, a.label, b.label)) },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            wrongSim = false
-                            warned = true
-                            doSend(simSel)
-                        }) { Text(stringResource(R.string.send_from, b.label)) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = {
+                IosAlert(
+                    title = stringResource(R.string.different_sim),
+                    message = stringResource(R.string.different_sim_msg, a.label, b.label),
+                    actions = listOf(
+                        AlertAction(stringResource(R.string.use_sim, a.label), bold = true, onClick = {
                             wrongSim = false
                             picked = a.subId
                             onPickSim(a.subId)
                             doSend(a.subId)
-                        }) { Text(stringResource(R.string.use_sim, a.label)) }
-                    }
+                        }),
+                        AlertAction(stringResource(R.string.send_from, b.label), onClick = {
+                            wrongSim = false
+                            warned = true
+                            doSend(simSel)
+                        })
+                    ),
+                    onDismiss = { wrongSim = false }
                 )
             } else wrongSim = false
         }
@@ -801,13 +800,6 @@ private fun InputBar(
         Modifier
             .fillMaxWidth()
             .onSizeChanged { onHeight(it.height) }
-            .background(
-                Brush.verticalGradient(
-                    0f to p.bg.copy(alpha = 0f),
-                    0.35f to p.bg.copy(alpha = 0.95f),
-                    1f to p.bg
-                )
-            )
             .navigationBarsPadding()
     ) {
         AnimatedVisibility(
@@ -945,7 +937,7 @@ private fun InputBar(
             enter = expandVertically(Motion.layout()) + fadeIn(Motion.fade(200)),
             exit = shrinkVertically(Motion.layout()) + fadeOut(Motion.fade(150))
         ) {
-            EmojiPanel(onPick = onEmoji, onBackspace = onBackspace)
+            Box(Modifier.background(p.bg)) { EmojiPanel(onPick = onEmoji, onBackspace = onBackspace) }
         }
     }
 }

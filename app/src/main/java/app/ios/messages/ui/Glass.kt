@@ -22,6 +22,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import android.graphics.RenderNode
+import android.graphics.RenderEffect
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Shader
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -180,5 +194,93 @@ fun GlassFill(
         if (snap != null) GlassBackdrop(snap, origin, Modifier.matchParentSize(), blurDp)
         Box(Modifier.matchParentSize().background(tint))
         Box(Modifier.matchParentSize().graphicsLayer { alpha = 1f - ready }.background(opaque))
+    }
+}
+
+/** Holds the two render nodes used for live backdrop blur of a scrolling list. */
+class LiveBlur {
+    val src = RenderNode("lbSrc")
+    val blur = RenderNode("lbBlur")
+    var radius = -1f
+}
+
+/**
+ * Live "bar material": the list is recorded once, then the strip under a bar (top or bottom)
+ * is drawn again, blurred, with a translucent tint. Updates every frame while scrolling.
+ */
+fun Modifier.liveBlurEdge(
+    h: LiveBlur,
+    bottom: Boolean,
+    heightPx: () -> Float,
+    amount: () -> Float,
+    bg: Color,
+    tint: Color,
+    radiusPx: Float,
+    fade: Boolean = false
+): Modifier = drawWithContent {
+    val a = amount().coerceIn(0f, 1f)
+    val hh = heightPx().coerceAtMost(size.height)
+    if (a <= 0.01f || hh <= 1f || size.width < 1f) {
+        drawContent()
+        return@drawWithContent
+    }
+    val w = size.width.toInt()
+    val fullH = size.height.toInt()
+    val bh = hh.toInt().coerceAtLeast(1)
+
+    h.src.setPosition(0, 0, w, fullH)
+    val rc = h.src.beginRecording()
+    val old = drawContext.canvas
+    try {
+        drawContext.canvas = Canvas(rc)
+        drawContent()
+    } finally {
+        drawContext.canvas = old
+        h.src.endRecording()
+    }
+    drawIntoCanvas { it.nativeCanvas.drawRenderNode(h.src) }
+
+    val oy = if (bottom) (fullH - bh).toFloat() else 0f
+    h.blur.setPosition(0, 0, w, bh)
+    if (h.radius != radiusPx) {
+        val cm = android.graphics.ColorMatrix().apply { setSaturation(1.8f) }
+        h.blur.setRenderEffect(
+            RenderEffect.createColorFilterEffect(
+                ColorMatrixColorFilter(cm),
+                RenderEffect.createBlurEffect(radiusPx, radiusPx, Shader.TileMode.CLAMP)
+            )
+        )
+        h.radius = radiusPx
+    }
+    val rb = h.blur.beginRecording()
+    try {
+        rb.drawColor(bg.toArgb())
+        rb.translate(0f, -oy)
+        rb.drawRenderNode(h.src)
+    } finally {
+        h.blur.endRecording()
+    }
+
+    val bounds = Rect(0f, 0f, size.width, hh)
+    val layerPaint = Paint().apply { alpha = a }
+    drawIntoCanvas { c ->
+        c.save()
+        c.translate(0f, oy)
+        c.saveLayer(bounds, layerPaint)
+        c.nativeCanvas.drawRenderNode(h.blur)
+        drawRect(tint, size = Size(size.width, hh))
+        if (fade) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    if (bottom) listOf(Color.Transparent, Color.Black) else listOf(Color.Black, Color.Transparent),
+                    startY = 0f,
+                    endY = hh
+                ),
+                size = Size(size.width, hh),
+                blendMode = BlendMode.DstIn
+            )
+        }
+        c.restore()
+        c.restore()
     }
 }

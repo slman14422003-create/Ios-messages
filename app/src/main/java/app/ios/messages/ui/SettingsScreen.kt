@@ -1,5 +1,9 @@
 package app.ios.messages.ui
 
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import app.ios.messages.R
 
@@ -87,6 +91,7 @@ fun SettingsScreen(
     onRestore: () -> Unit = {}
 ) {
     val p = LocalPalette.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var editing by remember { mutableStateOf<SimInfo?>(null) }
     editing?.let { sim ->
         SimEditDialog(sim, onDismiss = { editing = null }, onSave = { name, color ->
@@ -94,35 +99,19 @@ fun SettingsScreen(
             editing = null
         })
     }
-    Column(Modifier.fillMaxSize().background(p.groupBg)) {
-        Column(Modifier.fillMaxWidth().background(p.groupBg).statusBarsPadding()) {
-            Box(Modifier.fillMaxWidth().height(44.dp)) {
-                Row(
-                    Modifier
-                        .align(Alignment.CenterStart)
-                        .plainClickable(onBack)
-                        .padding(start = 12.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ChevronLeft(p.blue)
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.messages), color = p.blue, fontSize = 17.sp)
-                }
-                Text(
-                    stringResource(R.string.settings),
-                    color = p.label,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-            Hairline()
-        }
+    val scroll = rememberScrollState()
+    val live = remember { LiveBlur() }
+    var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val blurPx = with(androidx.compose.ui.platform.LocalDensity.current) { 22.dp.toPx() }
+    val topInset = androidx.compose.foundation.layout.WindowInsets.statusBars
+        .asPaddingValues().calculateTopPadding()
+    Box(Modifier.fillMaxSize().background(p.groupBg)) {
         Column(
             Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .fillMaxSize()
+                .liveBlurEdge(live, false, { headerH }, { (scroll.value / 24f).coerceIn(0f, 1f) }, p.groupBg, p.bar.copy(alpha = 0.7f), blurPx)
+                .verticalScroll(scroll)
+                .padding(top = topInset + 44.dp)
                 .navigationBarsPadding()
                 .padding(bottom = 32.dp)
         ) {
@@ -248,9 +237,42 @@ fun SettingsScreen(
 
             Section(stringResource(R.string.about)) {
                 SettingRow(stringResource(R.string.version), last = true) {
-                    Text("2.0", color = p.secondary, fontSize = 17.sp)
+                    Text(
+                        runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "",
+                        color = p.secondary,
+                        fontSize = 17.sp
+                    )
                 }
             }
+        }
+        Column(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .onSizeChanged { headerH = it.height.toFloat() }
+                .statusBarsPadding()
+        ) {
+            Box(Modifier.fillMaxWidth().height(44.dp)) {
+                Row(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .plainClickable(onBack)
+                        .padding(start = 12.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ChevronLeft(p.blue)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.messages), color = p.blue, fontSize = 17.sp)
+                }
+                Text(
+                    stringResource(R.string.settings),
+                    color = p.label,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+            Hairline(Modifier.graphicsLayer { alpha = (scroll.value / 24f).coerceIn(0f, 1f) })
         }
     }
 }
@@ -343,35 +365,26 @@ private fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
 private fun SimEditDialog(sim: SimInfo, onDismiss: () -> Unit, onSave: (String, Long) -> Unit) {
     var name by remember { mutableStateOf(sim.label) }
     var color by remember { mutableStateOf(sim.color) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.sim_dialog_title, sim.slot + 1, sim.carrier)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { if (it.length <= 16) name = it },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.sim_name_hint)) }
+    IosAlert(
+        title = stringResource(R.string.sim_dialog_title, sim.slot + 1, sim.carrier),
+        actions = listOf(
+            AlertAction(stringResource(R.string.cancel), onClick = onDismiss),
+            AlertAction(stringResource(R.string.save), bold = true, onClick = { onSave(name.ifBlank { sim.carrier }, color) })
+        ),
+        onDismiss = onDismiss
+    ) {
+        IosField(name, { if (it.length <= 16) name = it }, stringResource(R.string.sim_name_hint))
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Sims.palette.forEach { c ->
+                Box(
+                    Modifier
+                        .size(if (c == color) 28.dp else 24.dp)
+                        .clip(CircleShape)
+                        .background(Color(c))
+                        .plainClickable { color = c }
                 )
-                Spacer(Modifier.height(16.dp))
-                Row {
-                    Sims.palette.forEach { c ->
-                        Box(
-                            Modifier
-                                .padding(end = 10.dp)
-                                .size(if (c == color) 32.dp else 28.dp)
-                                .clip(CircleShape)
-                                .background(Color(c))
-                                .plainClickable { color = c }
-                        )
-                    }
-                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(name.ifBlank { sim.carrier }, color) }) { Text(stringResource(R.string.save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
-    )
+        }
+    }
 }

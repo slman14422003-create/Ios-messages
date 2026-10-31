@@ -117,14 +117,24 @@ fun GearIcon(color: Color, modifier: Modifier = Modifier) {
     Canvas(modifier.size(24.dp)) {
         val c = center
         val w = size.width
-        val sw = 1.9.dp.toPx()
-        drawCircle(color, radius = w * 0.26f, center = c, style = Stroke(sw))
-        drawCircle(color, radius = w * 0.09f, center = c, style = Stroke(sw))
-        for (i in 0 until 8) {
-            rotate(i * 45f, c) {
-                drawLine(color, Offset(c.x, c.y - w * 0.33f), Offset(c.x, c.y - w * 0.46f), sw * 1.7f, StrokeCap.Round)
+        val sw = 1.8.dp.toPx()
+        val tipR = w * 0.46f
+        val rootR = w * 0.35f
+        val path = Path()
+        val teeth = 8
+        val pts = listOf(-17f to rootR, -9f to tipR, 9f to tipR, 17f to rootR)
+        for (k in 0 until teeth) {
+            val base = k * 360f / teeth
+            pts.forEachIndexed { idx, (d, r) ->
+                val rad = Math.toRadians((base + d - 90f).toDouble())
+                val x = c.x + (r * kotlin.math.cos(rad)).toFloat()
+                val y = c.y + (r * kotlin.math.sin(rad)).toFloat()
+                if (k == 0 && idx == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
         }
+        path.close()
+        drawPath(path, color, style = Stroke(sw, join = StrokeJoin.Round, cap = StrokeCap.Round))
+        drawCircle(color, radius = w * 0.15f, center = c, style = Stroke(sw))
     }
 }
 

@@ -57,7 +57,7 @@ val LightPalette = Palette(
     outline = Color(0xFFC6C6C8),
     avatarTop = Color(0xFFA6AAB4),
     avatarBottom = Color(0xFF828690),
-    glass = Color(0xF0F2F2F7),
+    glass = Color(0xA8FFFFFF),
     groupBg = Color(0xFFF2F2F7),
     cell = Color.White
 )
@@ -77,7 +77,7 @@ val DarkPalette = Palette(
     outline = Color(0xFF3A3A3C),
     avatarTop = Color(0xFF6D717A),
     avatarBottom = Color(0xFF4B4E55),
-    glass = Color(0xF01C1C1E),
+    glass = Color(0x99303033),
     groupBg = Color.Black,
     cell = Color(0xFF1C1C1E)
 )
