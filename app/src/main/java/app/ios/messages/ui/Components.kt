@@ -1,6 +1,17 @@
 package app.ios.messages.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,8 +55,14 @@ import androidx.compose.ui.unit.sp
 fun Modifier.iosClickable(onClick: () -> Unit, onLongClick: (() -> Unit)? = null): Modifier = composed {
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
+    val base = LocalPalette.current.pressed
+    val color by animateColorAsState(
+        if (pressed) base else base.copy(alpha = 0f),
+        if (pressed) snap<Color>() else tween<Color>(260),
+        label = "row"
+    )
     this
-        .background(if (pressed) LocalPalette.current.pressed else Color.Transparent)
+        .drawBehind { drawRect(color) }
         .combinedClickable(
             interactionSource = src,
             indication = null,
@@ -61,6 +78,41 @@ fun Modifier.plainClickable(onClick: () -> Unit): Modifier = composed {
         indication = null,
         onClick = onClick
     )
+}
+
+fun Modifier.dimClickable(onClick: () -> Unit): Modifier = composed {
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val a by animateFloatAsState(
+        if (pressed) 0.35f else 1f,
+        if (pressed) snap<Float>() else tween<Float>(260),
+        label = "dim"
+    )
+    this
+        .graphicsLayer { alpha = a }
+        .clickable(interactionSource = src, indication = null, onClick = onClick)
+}
+
+fun Modifier.pressScale(src: InteractionSource, pressedScale: Float = 0.9f): Modifier = composed {
+    val pressed by src.collectIsPressedAsState()
+    val s by animateFloatAsState(
+        if (pressed) pressedScale else 1f,
+        spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        label = "press"
+    )
+    this.graphicsLayer { scaleX = s; scaleY = s }
+}
+
+@Composable
+fun rememberTick(): () -> Unit {
+    val h = LocalHapticFeedback.current
+    return remember(h) { { h.performHapticFeedback(HapticFeedbackType.TextHandleMove) } }
+}
+
+@Composable
+fun rememberThud(): () -> Unit {
+    val h = LocalHapticFeedback.current
+    return remember(h) { { h.performHapticFeedback(HapticFeedbackType.LongPress) } }
 }
 
 @Composable
@@ -139,13 +191,15 @@ fun Avatar(name: String, size: Dp) {
 @Composable
 fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, content: @Composable () -> Unit) {
     val p = LocalPalette.current
+    val src = remember { MutableInteractionSource() }
     Box(
         modifier
             .size(size)
+            .pressScale(src, 0.88f)
             .clip(CircleShape)
             .background(p.glass)
             .border(Dp.Hairline, p.separator, CircleShape)
-            .plainClickable(onClick),
+            .clickable(interactionSource = src, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) { content() }
 }

@@ -19,6 +19,8 @@ object Notifier {
         if (ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val prefs = Prefs(ctx)
         if (!prefs.notifications) return
+        val tid = runCatching { SmsRepository(ctx).threadIdFor(address) }.getOrNull()
+        if (tid != null && tid in prefs.muted) return
         val shownBody = if (prefs.previews) body else "New Message"
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(

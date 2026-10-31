@@ -12,6 +12,9 @@ import java.util.Locale
 object DateFmt {
     private val shortTime = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
 
+    fun time(ts: Long): String =
+        shortTime.format(Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()))
+
     /** Conversation-list label: time / Yesterday / weekday / date. */
     fun list(ts: Long): String {
         val zone = ZoneId.systemDefault()

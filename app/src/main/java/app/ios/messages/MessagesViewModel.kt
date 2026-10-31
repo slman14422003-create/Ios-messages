@@ -30,6 +30,9 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     private val _pinned = MutableStateFlow(prefs.pinned)
     val pinned: StateFlow<Set<Long>> = _pinned
 
+    private val _muted = MutableStateFlow(prefs.muted)
+    val muted: StateFlow<Set<Long>> = _muted
+
     private val _bubbleBlue = MutableStateFlow(prefs.bubbleBlue)
     val bubbleBlue: StateFlow<Boolean> = _bubbleBlue
 
@@ -82,6 +85,13 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         if (!s.add(threadId)) s.remove(threadId)
         _pinned.value = s
         prefs.pinned = s
+    }
+
+    fun toggleMute(threadId: Long) {
+        val s = _muted.value.toMutableSet()
+        if (!s.add(threadId)) s.remove(threadId)
+        _muted.value = s
+        prefs.muted = s
     }
 
     fun setBubbleBlue(v: Boolean) {

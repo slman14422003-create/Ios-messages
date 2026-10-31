@@ -124,3 +124,21 @@ fun GearIcon(color: Color, modifier: Modifier = Modifier) {
         }
     }
 }
+
+@Composable
+fun BellSlash(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(13.dp)) {
+        val w = size.width
+        val h = size.height
+        val sw = 1.3.dp.toPx()
+        val bell = Path().apply {
+            moveTo(w * 0.18f, h * 0.74f)
+            cubicTo(w * 0.30f, h * 0.64f, w * 0.28f, h * 0.50f, w * 0.30f, h * 0.40f)
+            cubicTo(w * 0.32f, h * 0.20f, w * 0.68f, h * 0.20f, w * 0.70f, h * 0.40f)
+            cubicTo(w * 0.72f, h * 0.50f, w * 0.70f, h * 0.64f, w * 0.82f, h * 0.74f)
+            close()
+        }
+        drawPath(bell, color, style = Stroke(sw, join = StrokeJoin.Round))
+        drawLine(color, Offset(w * 0.08f, h * 0.10f), Offset(w * 0.92f, h * 0.92f), sw, StrokeCap.Round)
+    }
+}

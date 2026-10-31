@@ -14,8 +14,19 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -121,6 +132,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     val isDefault by vm.isDefault.collectAsStateWithLifecycle()
     val hasPermission by vm.hasPermission.collectAsStateWithLifecycle()
     val pinned by vm.pinned.collectAsStateWithLifecycle()
+    val muted by vm.muted.collectAsStateWithLifecycle()
     val contacts by vm.contacts.collectAsStateWithLifecycle()
     val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
     val notifications by vm.notifications.collectAsStateWithLifecycle()
@@ -138,7 +150,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     LaunchedEffect(chat != null) {
         progress.animateTo(
             if (chat != null) 1f else 0f,
-            tween(if (chat != null) 380 else 320, easing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))
+            spring(dampingRatio = 1f, stiffness = 320f)
         )
     }
     val chatVisible by remember { derivedStateOf { progress.value > 0.001f } }
@@ -147,7 +159,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     LaunchedEffect(settingsOpen) {
         settingsProgress.animateTo(
             if (settingsOpen) 1f else 0f,
-            tween(if (settingsOpen) 380 else 320, easing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))
+            spring(dampingRatio = 1f, stiffness = 320f)
         )
     }
     val settingsVisible by remember { derivedStateOf { settingsProgress.value > 0.001f } }
@@ -178,6 +190,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
             ConversationsScreen(
                 conversations = conversations,
                 pinned = pinned,
+                muted = muted,
                 isDefault = isDefault,
                 hasPermission = hasPermission,
                 onOpen = { c -> chat = ChatTarget(c.threadId, c.address, c.name) },
@@ -186,6 +199,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                 onDelete = { vm.deleteThreads(it) },
                 onMarkRead = { vm.markRead(it) },
                 onTogglePin = { vm.togglePin(it) },
+                onToggleMute = { vm.toggleMute(it) },
                 onMakeDefault = {
                     val rm = ctx.getSystemService(RoleManager::class.java)
                     if (rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
@@ -208,6 +222,14 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                     if (t.address != null || t.threadId != null) vm.openChat(t.threadId, t.address)
                 }
                 Box(Modifier.fillMaxSize().graphicsLayer { translationX = (1f - progress.value) * size.width }) {
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .offset(x = (-14).dp)
+                            .fillMaxHeight()
+                            .width(14.dp)
+                            .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.14f))))
+                    )
                     if (t.address == null) {
                         NewMessageScreen(
                             contacts = contacts,
@@ -276,10 +298,60 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
                     }
                 )
             }
+            EdgeSwipeBack(
+                progress = settingsProgress,
+                enabled = settingsOpen,
+                onCommit = { settingsOpen = false },
+                modifier = Modifier.align(Alignment.CenterStart)
+            )
         }
+
+        EdgeSwipeBack(
+            progress = progress,
+            enabled = chat != null,
+            onCommit = {
+                chat = null
+                vm.closeChat()
+            },
+            modifier = Modifier.align(Alignment.CenterStart)
+        )
     }
 }
 
+
+@Composable
+private fun EdgeSwipeBack(
+    progress: Animatable<Float, AnimationVector1D>,
+    enabled: Boolean,
+    onCommit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (!enabled) return
+    val scope = rememberCoroutineScope()
+    val commit by rememberUpdatedState(onCommit)
+    val widthPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
+    Box(
+        modifier
+            .fillMaxHeight()
+            .width(12.dp)
+            .pointerInput(Unit) {
+                val settle = spring<Float>(dampingRatio = 1f, stiffness = 320f)
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (progress.value < 0.55f) commit()
+                        else scope.launch { progress.animateTo(1f, settle) }
+                    },
+                    onDragCancel = { scope.launch { progress.animateTo(1f, settle) } },
+                    onHorizontalDrag = { change, dx ->
+                        change.consume()
+                        scope.launch { progress.snapTo((progress.value - dx / widthPx).coerceIn(0f, 1f)) }
+                    }
+                )
+            }
+    )
+}
 
 @Composable
 private fun CrashScreen(trace: String, onContinue: () -> Unit) {

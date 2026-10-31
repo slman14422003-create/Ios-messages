@@ -1,1 +1,8 @@
-# Defaults are enough (Compose + Parcelize).
+-keepattributes SourceFile,LineNumberTable,*Annotation*,Signature,InnerClasses,EnclosingMethod
+-keep class app.ios.messages.ChatTarget { *; }
+-keep class * extends androidx.lifecycle.ViewModel { <init>(...); }
+-keep class * extends androidx.lifecycle.AndroidViewModel { <init>(android.app.Application); }
+-keep class app.ios.messages.SmsReceiver { *; }
+-keep class app.ios.messages.MmsReceiver { *; }
+-keep class app.ios.messages.HeadlessSmsSendService { *; }
+-dontwarn kotlin.**

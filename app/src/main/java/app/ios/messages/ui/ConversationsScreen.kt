@@ -1,6 +1,7 @@
 package app.ios.messages.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -66,6 +67,7 @@ import app.ios.messages.data.Conversation
 fun ConversationsScreen(
     conversations: List<Conversation>,
     pinned: Set<Long>,
+    muted: Set<Long>,
     isDefault: Boolean,
     hasPermission: Boolean,
     onOpen: (Conversation) -> Unit,
@@ -74,6 +76,7 @@ fun ConversationsScreen(
     onDelete: (List<Long>) -> Unit,
     onMarkRead: (List<Long>) -> Unit,
     onTogglePin: (Long) -> Unit,
+    onToggleMute: (Long) -> Unit,
     onMakeDefault: () -> Unit,
     onGrant: () -> Unit,
     onOpenSettings: () -> Unit
@@ -85,6 +88,8 @@ fun ConversationsScreen(
     var selected by remember { mutableStateOf(setOf<Long>()) }
     var editMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf<Long?>(null) }
+    val thud = rememberThud()
+    val tick = rememberTick()
 
     val filtered = remember(conversations, filterIdx, query) {
         conversations.filter { c ->
@@ -163,11 +168,12 @@ fun ConversationsScreen(
                                         c = c,
                                         modifier = Modifier.weight(1f),
                                         onClick = { if (selecting) toggle(c.threadId) else onOpen(c) },
-                                        onLongClick = { if (!selecting) rowMenu = c.threadId },
+                                        onLongClick = { if (!selecting) { thud(); rowMenu = c.threadId } },
                                         menu = {
                                             RowMenu(
-                                                c, true, isDefault, rowMenu == c.threadId,
+                                                c, true, c.threadId in muted, isDefault, rowMenu == c.threadId,
                                                 onDismiss = { rowMenu = null },
+                                                onToggleMute = { onToggleMute(c.threadId) },
                                                 onTogglePin = { onTogglePin(c.threadId) },
                                                 onMarkRead = { onMarkRead(listOf(c.threadId)) },
                                                 onDelete = { onDelete(listOf(c.threadId)) }
@@ -186,21 +192,37 @@ fun ConversationsScreen(
             items(rest, key = { it.threadId }) { c ->
                 val state = rememberSwipeToDismissBoxState(
                     confirmValueChange = { v ->
-                        if (v == SwipeToDismissBoxValue.EndToStart && isDefault) {
-                            onDelete(listOf(c.threadId)); true
-                        } else false
+                        when {
+                            v == SwipeToDismissBoxValue.EndToStart && isDefault -> {
+                                onDelete(listOf(c.threadId)); true
+                            }
+                            v == SwipeToDismissBoxValue.StartToEnd -> {
+                                tick(); onTogglePin(c.threadId); false
+                            }
+                            else -> false
+                        }
                     }
                 )
                 SwipeToDismissBox(
                     state = state,
-                    enableDismissFromStartToEnd = false,
+                    modifier = Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f)),
+                    enableDismissFromStartToEnd = !selecting,
                     enableDismissFromEndToStart = !selecting,
                     backgroundContent = {
+                        val toPin = state.dismissDirection == SwipeToDismissBoxValue.StartToEnd
                         Box(
-                            Modifier.fillMaxSize().background(Red).padding(end = 24.dp),
-                            contentAlignment = Alignment.CenterEnd
+                            Modifier
+                                .fillMaxSize()
+                                .background(if (toPin) PinOrange else Red)
+                                .padding(horizontal = 24.dp),
+                            contentAlignment = if (toPin) Alignment.CenterStart else Alignment.CenterEnd
                         ) {
-                            Text("Delete", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                if (toPin) (if (c.threadId in pinned) "Unpin" else "Pin") else "Delete",
+                                color = Color.White,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 ) {
@@ -209,12 +231,14 @@ fun ConversationsScreen(
                             c = c,
                             selecting = selecting,
                             selected = c.threadId in selected,
+                            muted = c.threadId in muted,
                             onClick = { if (selecting) toggle(c.threadId) else onOpen(c) },
-                            onLongClick = { if (!selecting) rowMenu = c.threadId }
+                            onLongClick = { if (!selecting) { thud(); rowMenu = c.threadId } }
                         )
                         RowMenu(
-                            c, c.threadId in pinned, isDefault, rowMenu == c.threadId,
+                            c, c.threadId in pinned, c.threadId in muted, isDefault, rowMenu == c.threadId,
                             onDismiss = { rowMenu = null },
+                            onToggleMute = { onToggleMute(c.threadId) },
                             onTogglePin = { onTogglePin(c.threadId) },
                             onMarkRead = { onMarkRead(listOf(c.threadId)) },
                             onDelete = { onDelete(listOf(c.threadId)) }
@@ -251,7 +275,7 @@ fun ConversationsScreen(
                         fontSize = 17.sp,
                         fontWeight = if (selecting) FontWeight.SemiBold else FontWeight.Normal,
                         modifier = Modifier
-                            .plainClickable { if (selecting) endSelecting() else editMenu = true }
+                            .dimClickable { if (selecting) endSelecting() else editMenu = true }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     )
                     DropdownMenu(expanded = editMenu, onDismissRequest = { editMenu = false }) {
@@ -282,12 +306,12 @@ fun ConversationsScreen(
                     ) {
                         Box(
                             Modifier
-                                .plainClickable(onSettings)
+                                .dimClickable(onSettings)
                                 .padding(horizontal = 10.dp, vertical = 10.dp)
                         ) { GearIcon(p.blue) }
                         Box(
                             Modifier
-                                .plainClickable(onCompose)
+                                .dimClickable(onCompose)
                                 .padding(start = 6.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)
                         ) { ComposeIcon(p.blue) }
                     }
@@ -343,9 +367,11 @@ fun ConversationsScreen(
 private fun RowMenu(
     c: Conversation,
     isPinned: Boolean,
+    isMuted: Boolean,
     isDefault: Boolean,
     expanded: Boolean,
     onDismiss: () -> Unit,
+    onToggleMute: () -> Unit,
     onTogglePin: () -> Unit,
     onMarkRead: () -> Unit,
     onDelete: () -> Unit
@@ -354,6 +380,10 @@ private fun RowMenu(
         DropdownMenuItem(
             text = { Text(if (isPinned) "Unpin" else "Pin") },
             onClick = { onTogglePin(); onDismiss() }
+        )
+        DropdownMenuItem(
+            text = { Text(if (isMuted) "Show Alerts" else "Hide Alerts") },
+            onClick = { onToggleMute(); onDismiss() }
         )
         if (c.unread > 0) {
             DropdownMenuItem(
@@ -380,11 +410,13 @@ private fun PinTile(
     menu: @Composable () -> Unit
 ) {
     val p = LocalPalette.current
+    val src = remember { MutableInteractionSource() }
     Column(
         modifier
             .padding(vertical = 6.dp)
+            .pressScale(src, 0.92f)
             .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = src,
                 indication = null,
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -497,6 +529,7 @@ private fun ConversationRow(
     c: Conversation,
     selecting: Boolean,
     selected: Boolean,
+    muted: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -523,6 +556,10 @@ private fun ConversationRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+                    if (muted) {
+                        BellSlash(p.tertiary)
+                        Spacer(Modifier.width(6.dp))
+                    }
                     Spacer(Modifier.width(8.dp))
                     Text(DateFmt.list(c.date), color = p.secondary, fontSize = 15.sp, maxLines = 1)
                     Spacer(Modifier.width(6.dp))
@@ -541,3 +578,5 @@ private fun ConversationRow(
         Hairline(Modifier.align(Alignment.BottomStart).padding(start = 88.dp))
     }
 }
+
+private val PinOrange = Color(0xFFFF9F0A)

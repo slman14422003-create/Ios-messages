@@ -5,6 +5,19 @@ import android.net.Uri
 import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -12,7 +25,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,6 +131,7 @@ private fun buildItems(msgs: List<Message>): List<ChatItem> {
     return out
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     target: ChatTarget,
@@ -140,16 +154,31 @@ fun ChatScreen(
     var inputH by remember { mutableIntStateOf(0) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val barH = 94.dp
+    val tick = rememberTick()
+    val scope = rememberCoroutineScope()
+    val reveal = remember { Animatable(0f) }
+    val revealPx = with(density) { 64.dp.toPx() }
 
     val newestKey = rev.firstOrNull()?.key
     LaunchedEffect(newestKey) { if (rev.isNotEmpty()) listState.animateScrollToItem(0) }
 
     Box(Modifier.fillMaxSize().background(p.bg).imePadding()) {
-        // Newest message at index 0 + reverseLayout => opens at the bottom with no scroll jump.
         LazyColumn(
             state = listState,
             reverseLayout = true,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    val back = spring<Float>(dampingRatio = 0.8f, stiffness = 380f)
+                    detectHorizontalDragGestures(
+                        onDragEnd = { scope.launch { reveal.animateTo(0f, back) } },
+                        onDragCancel = { scope.launch { reveal.animateTo(0f, back) } },
+                        onHorizontalDrag = { change, dx ->
+                            change.consume()
+                            scope.launch { reveal.snapTo((reveal.value - dx / revealPx).coerceIn(0f, 1f)) }
+                        }
+                    )
+                },
             contentPadding = PaddingValues(
                 top = statusH + barH + 6.dp,
                 bottom = with(density) { inputH.toDp() } + 6.dp
@@ -158,7 +187,13 @@ fun ChatScreen(
             items(rev, key = { it.key }, contentType = { it::class }) { item ->
                 when (item) {
                     is ChatItem.Time -> TimeHeader(item)
-                    is ChatItem.Bubble -> BubbleRow(item, isDefault, onDeleteMessage)
+                    is ChatItem.Bubble -> BubbleRow(
+                        item,
+                        isDefault,
+                        onDeleteMessage,
+                        { reveal.value },
+                        Modifier.animateItemPlacement(spring(dampingRatio = 0.85f, stiffness = 500f))
+                    )
                     is ChatItem.Status -> Text(
                         item.text,
                         color = p.secondary,
@@ -261,6 +296,7 @@ fun ChatScreen(
                     val body = text.trim()
                     val addr = address
                     if (body.isNotEmpty() && addr.isNotEmpty()) {
+                        tick()
                         onSend(addr, body)
                         text = ""
                     }
@@ -287,59 +323,129 @@ private fun TimeHeader(t: ChatItem.Time) {
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BubbleRow(b: ChatItem.Bubble, isDefault: Boolean, onDelete: (Long) -> Unit) {
+private fun BubbleRow(
+    b: ChatItem.Bubble,
+    isDefault: Boolean,
+    onDelete: (Long) -> Unit,
+    reveal: () -> Float,
+    modifier: Modifier
+) {
     val p = LocalPalette.current
     val sent = LocalSentColor.current
     val mine = b.m.mine
+    val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val thud = rememberThud()
     var menu by remember { mutableStateOf(false) }
     val maxW = (LocalConfiguration.current.screenWidthDp * 0.76f).dp
     val shape = remember(mine, b.tail) { BubbleShape(mine, b.tail) }
-    val interaction = remember { MutableInteractionSource() }
+    val linkColor = if (mine) Color.White else p.blue
+    val annotated = remember(b.m.body, linkColor) { linkify(b.m.body, linkColor) }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val timeLabel = remember(b.m.date) { DateFmt.time(b.m.date) }
+    val appear = remember { Animatable(if (System.currentTimeMillis() - b.m.date < 4000L) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f))
+    }
+    val shiftPx = with(LocalDensity.current) { 56.dp.toPx() }
+    val padStart = if (mine) 12.dp else 18.dp
+    val padEnd = if (mine) 18.dp else 12.dp
 
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = if (b.tight) 2.dp else 9.dp, start = 8.dp, end = 8.dp),
-        contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart
-    ) {
-        Box {
-            Text(
-                text = b.m.body,
-                color = if (mine) Color.White else p.receivedText,
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
-                modifier = Modifier
-                    .widthIn(max = maxW)
-                    .background(if (mine) sent else p.received, shape)
-                    .combinedClickable(
-                        interactionSource = interaction,
-                        indication = null,
-                        onClick = {},
-                        onLongClick = { menu = true }
-                    )
-                    .padding(
-                        start = if (mine) 12.dp else 18.dp,
-                        end = if (mine) 18.dp else 12.dp,
-                        top = 7.dp,
-                        bottom = 7.dp
-                    )
-            )
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(
-                    text = { Text("Copy") },
-                    onClick = { clipboard.setText(AnnotatedString(b.m.body)); menu = false }
+    Box(modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer { translationX = -reveal() * shiftPx }
+                .padding(top = if (b.tight) 2.dp else 9.dp, start = 8.dp, end = 8.dp),
+            contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart
+        ) {
+            Box(
+                Modifier.graphicsLayer {
+                    val v = appear.value
+                    val s = 0.6f + 0.4f * v
+                    scaleX = s
+                    scaleY = s
+                    alpha = v.coerceIn(0f, 1f)
+                    translationY = (1f - v) * 14.dp.toPx()
+                    transformOrigin = TransformOrigin(if (mine) 1f else 0f, 1f)
+                }
+            ) {
+                Text(
+                    text = annotated,
+                    onTextLayout = { layout = it },
+                    color = if (mine) Color.White else p.receivedText,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
+                    modifier = Modifier
+                        .widthIn(max = maxW)
+                        .background(if (mine) sent else p.received, shape)
+                        .pointerInput(annotated) {
+                            val ox = padStart.toPx()
+                            val oy = 7.dp.toPx()
+                            detectTapGestures(
+                                onLongPress = {
+                                    thud()
+                                    menu = true
+                                },
+                                onTap = { pos ->
+                                    val l = layout ?: return@detectTapGestures
+                                    val off = l.getOffsetForPosition(Offset(pos.x - ox, pos.y - oy))
+                                    val hit = annotated.getStringAnnotations(off, off).firstOrNull()
+                                        ?: return@detectTapGestures
+                                    runCatching {
+                                        if (hit.tag == TAG_URL) {
+                                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hit.item)))
+                                        } else {
+                                            ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(hit.item))))
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        .padding(start = padStart, end = padEnd, top = 7.dp, bottom = 7.dp)
                 )
-                if (isDefault) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Delete", color = Red) },
-                        onClick = { onDelete(b.m.id); menu = false }
+                        text = { Text("Copy") },
+                        onClick = { clipboard.setText(AnnotatedString(b.m.body)); menu = false }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Share") },
+                        onClick = {
+                            menu = false
+                            runCatching {
+                                ctx.startActivity(
+                                    Intent.createChooser(
+                                        Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, b.m.body)
+                                        },
+                                        null
+                                    )
+                                )
+                            }
+                        }
+                    )
+                    if (isDefault) {
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = Red) },
+                            onClick = { onDelete(b.m.id); menu = false }
+                        )
+                    }
                 }
             }
         }
+        Text(
+            timeLabel,
+            color = p.secondary,
+            fontSize = 11.sp,
+            maxLines = 1,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp)
+                .graphicsLayer { alpha = reveal() }
+        )
     }
 }
 
@@ -384,6 +490,7 @@ private fun InputBar(
                 value = text,
                 onValueChange = onChange,
                 maxLines = 6,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 textStyle = TextStyle(fontSize = 17.sp, color = p.label, lineHeight = 22.sp),
                 cursorBrush = SolidColor(p.blue),
                 decorationBox = { inner ->
@@ -398,16 +505,18 @@ private fun InputBar(
                         }
                         AnimatedVisibility(
                             visible = text.isNotBlank(),
-                            enter = fadeIn() + scaleIn(initialScale = 0.6f),
-                            exit = fadeOut() + scaleOut(targetScale = 0.6f)
+                            enter = fadeIn() + scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)),
+                            exit = fadeOut() + scaleOut(targetScale = 0.5f)
                         ) {
+                            val src = remember { MutableInteractionSource() }
                             Box(
                                 Modifier
                                     .padding(end = 5.dp, bottom = 5.dp)
                                     .size(34.dp)
+                                    .pressScale(src, 0.84f)
                                     .clip(CircleShape)
                                     .background(sent)
-                                    .plainClickable(onSend),
+                                    .clickable(interactionSource = src, indication = null, onClick = onSend),
                                 contentAlignment = Alignment.Center
                             ) { SendArrow(Color.White) }
                         }
