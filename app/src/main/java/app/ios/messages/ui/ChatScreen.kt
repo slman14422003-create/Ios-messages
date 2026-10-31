@@ -1,5 +1,8 @@
 package app.ios.messages.ui
 
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.shadow
@@ -212,6 +215,8 @@ private fun ChatScreenBody(
     val address = target.address.orEmpty()
     var menu by remember { mutableStateOf(false) }
     var simMenu by remember { mutableStateOf(false) }
+    var emojiOpen by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = emojiOpen) { emojiOpen = false }
     val name = target.name ?: target.address ?: ""
     var text by rememberSaveable(address) { mutableStateOf(initialDraft) }
     var picked by remember(address) { mutableStateOf<Int?>(null) }
@@ -505,6 +510,10 @@ private fun ChatScreenBody(
                 onSim = { picked = it; onPickSim(it) },
                 onChange = { text = it },
                 onHeight = { inputH = it },
+                emojiOpen = emojiOpen,
+                onEmojiToggle = { emojiOpen = it },
+                onEmoji = { text += it },
+                onBackspace = { text = dropLastGrapheme(text) },
                 onPlus = { picker.launch("image/*") },
                 onClearAttach = { attach = null },
                 onSend = {
@@ -573,7 +582,17 @@ private fun BubbleContent(
                 } else Modifier
             )
         }
-        if (hasText) {
+        val jumbo = remember(b.m.body) { emojiOnlyCount(b.m.body) }
+        if (hasText && jumbo > 0) {
+            if (b.m.images.isNotEmpty()) Spacer(Modifier.height(2.dp))
+            Text(
+                text = b.m.body.trim(),
+                fontSize = when (jumbo) { 1 -> 64.sp; 2 -> 52.sp; else -> 44.sp },
+                modifier = Modifier
+                    .padding(horizontal = 6.dp)
+                    .then(if (interactive) Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { onLongPress() }) } else Modifier)
+            )
+        } else if (hasText) {
             if (b.m.images.isNotEmpty()) Spacer(Modifier.height(2.dp))
             Text(
                 text = annotated,
@@ -763,12 +782,19 @@ private fun InputBar(
     onSim: (Int) -> Unit,
     onChange: (String) -> Unit,
     onHeight: (Int) -> Unit,
+    emojiOpen: Boolean,
+    onEmojiToggle: (Boolean) -> Unit,
+    onEmoji: (String) -> Unit,
+    onBackspace: () -> Unit,
     onPlus: () -> Unit,
     onClearAttach: () -> Unit,
     onSend: () -> Unit
 ) {
     val p = LocalPalette.current
     val sent = LocalSentColor.current
+    val kb = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val fr = remember { FocusRequester() }
     val pill = RoundedCornerShape(22.dp)
     val canSend = text.isNotBlank() || attach != null
     Column(
@@ -847,6 +873,9 @@ private fun InputBar(
                     .border(Dp.Hairline, p.outline, pill)
             ) {
                 BasicTextField(
+                    modifier = Modifier
+                        .focusRequester(fr)
+                        .onFocusChanged { if (it.isFocused && emojiOpen) onEmojiToggle(false) },
                     value = text,
                     onValueChange = onChange,
                     maxLines = 6,
@@ -866,11 +895,28 @@ private fun InputBar(
                                 inner()
                             }
                             AnimatedVisibility(
-                                visible = !canSend,
+                                visible = true,
                                 enter = fadeIn() + scaleIn(initialScale = 0.6f, animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)),
                                 exit = fadeOut() + scaleOut(targetScale = 0.6f)
                             ) {
-                                Box(Modifier.padding(end = 12.dp, bottom = 12.dp)) { MicIcon(p.secondary) }
+                                Box(
+                                    Modifier
+                                        .padding(end = 4.dp, bottom = 0.dp)
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .plainClickable {
+                                            if (emojiOpen) {
+                                                onEmojiToggle(false)
+                                                fr.requestFocus()
+                                                kb?.show()
+                                            } else {
+                                                focus.clearFocus()
+                                                kb?.hide()
+                                                onEmojiToggle(true)
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) { EmojiIcon(if (emojiOpen) p.blue else p.secondary) }
                             }
                             AnimatedVisibility(
                                 visible = canSend,
@@ -893,6 +939,13 @@ private fun InputBar(
                     }
                 )
             }
+        }
+        AnimatedVisibility(
+            visible = emojiOpen,
+            enter = expandVertically(spring(dampingRatio = 0.9f, stiffness = 500f)) + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            EmojiPanel(onPick = onEmoji, onBackspace = onBackspace)
         }
     }
 }

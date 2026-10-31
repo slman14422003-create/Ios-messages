@@ -171,3 +171,44 @@ fun MicIcon(color: Color, modifier: Modifier = Modifier) {
         drawLine(color, Offset(w / 2, h * 0.74f), Offset(w / 2, h * 0.94f), sw, StrokeCap.Round)
     }
 }
+
+@Composable
+fun EmojiIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(22.dp)) {
+        val w = size.width
+        val sw = 1.6.dp.toPx()
+        val c = Offset(w / 2, w / 2)
+        drawCircle(color, radius = w * 0.43f, center = c, style = Stroke(sw))
+        drawCircle(color, radius = w * 0.055f, center = Offset(w * 0.37f, w * 0.40f))
+        drawCircle(color, radius = w * 0.055f, center = Offset(w * 0.63f, w * 0.40f))
+        drawArc(
+            color,
+            startAngle = 20f,
+            sweepAngle = 140f,
+            useCenter = false,
+            topLeft = Offset(w * 0.27f, w * 0.30f),
+            size = androidx.compose.ui.geometry.Size(w * 0.46f, w * 0.42f),
+            style = Stroke(sw, cap = StrokeCap.Round)
+        )
+    }
+}
+
+@Composable
+fun BackspaceIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val w = size.width
+        val h = size.height
+        val sw = 1.6.dp.toPx()
+        val body = Path().apply {
+            moveTo(w * 0.34f, h * 0.22f)
+            lineTo(w * 0.90f, h * 0.22f)
+            lineTo(w * 0.90f, h * 0.78f)
+            lineTo(w * 0.34f, h * 0.78f)
+            lineTo(w * 0.08f, h * 0.50f)
+            close()
+        }
+        drawPath(body, color, style = Stroke(sw, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawLine(color, Offset(w * 0.48f, h * 0.38f), Offset(w * 0.74f, h * 0.62f), sw, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.74f, h * 0.38f), Offset(w * 0.48f, h * 0.62f), sw, StrokeCap.Round)
+    }
+}
