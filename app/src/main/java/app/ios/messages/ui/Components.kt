@@ -1,6 +1,10 @@
 package app.ios.messages.ui
 
 import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import kotlinx.coroutines.launch
 import app.ios.messages.R
 
 import androidx.compose.animation.animateColorAsState
@@ -242,7 +246,10 @@ fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, co
     ) { content() }
 }
 
-private class MenuPosition : PopupPositionProvider {
+private class MenuPosition(private val padPx: Int, startOriginX: Float) : PopupPositionProvider {
+    var originX by mutableFloatStateOf(startOriginX)
+    var originY by mutableFloatStateOf(0f)
+
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,
@@ -252,30 +259,47 @@ private class MenuPosition : PopupPositionProvider {
         val x = (anchorBounds.center.x - popupContentSize.width / 2)
             .coerceIn(8, maxOf(8, windowSize.width - popupContentSize.width - 8))
         val below = anchorBounds.bottom - 14
-        val y = if (below + popupContentSize.height <= windowSize.height - 8) below
-        else maxOf(8, anchorBounds.top - popupContentSize.height + 14)
+        val fits = below + popupContentSize.height <= windowSize.height - 8
+        val y = if (fits) below else maxOf(8, anchorBounds.top - popupContentSize.height + 14)
+        val cardW = popupContentSize.width - 2 * padPx
+        if (cardW > 0) {
+            originX = ((anchorBounds.center.x - (x + padPx)).toFloat() / cardW).coerceIn(0.05f, 0.95f)
+        }
+        originY = if (fits) 0f else 1f
         return IntOffset(x, y)
     }
 }
 
 @Composable
-private fun MenuCard(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+private fun MenuCard(
+    modifier: Modifier,
+    snap: Backdrop?,
+    origin: IntOffset,
+    contentAlpha: () -> Float = { 1f },
+    content: @Composable ColumnScope.() -> Unit
+) {
     val dark = isSystemInDarkTheme()
     val shape = RoundedCornerShape(24.dp)
-    Column(
+    Box(
         modifier
             .shadow(
-                22.dp,
+                24.dp,
                 shape,
-                ambientColor = Color.Black.copy(alpha = 0.25f),
-                spotColor = Color.Black.copy(alpha = 0.25f)
+                ambientColor = Color.Black.copy(alpha = 0.22f),
+                spotColor = Color.Black.copy(alpha = 0.28f)
             )
             .clip(shape)
-            .background(if (dark) Color(0xFF2C2C2E) else Color(0xFFF8F8F8))
-            .width(IntrinsicSize.Max)
-            .widthIn(min = 210.dp, max = 300.dp),
-        content = content
-    )
+            .border(0.5.dp, if (dark) Color.White.copy(alpha = 0.13f) else Color.Black.copy(alpha = 0.06f), shape)
+    ) {
+        GlassFill(snap, origin, dark, Modifier.matchParentSize())
+        Column(
+            Modifier
+                .width(IntrinsicSize.Max)
+                .widthIn(min = 210.dp, max = 300.dp)
+                .graphicsLayer { alpha = contentAlpha() },
+            content = content
+        )
+    }
 }
 
 @Composable
@@ -287,32 +311,41 @@ fun IosMenu(
 ) {
     val a = remember { Animatable(0f) }
     var alive by remember { mutableStateOf(false) }
+    var snap by remember { mutableStateOf<Backdrop?>(null) }
+    val host = LocalView.current
     LaunchedEffect(expanded) {
         if (expanded) {
             alive = true
+            launch { snap = captureBackdrop(host) }
             a.animateTo(1f, Motion.menuIn())
         } else if (alive) {
             a.animateTo(0f, Motion.menuOut())
             alive = false
+            snap = null
         }
     }
     if (!alive) return
-    val ox = if (rtlSign() < 0f) 1f - originX else originX
+    val padPx = with(LocalDensity.current) { 20.dp.roundToPx() }
+    val provider = remember(padPx) { MenuPosition(padPx, originX) }
     Popup(
-        popupPositionProvider = remember { MenuPosition() },
+        popupPositionProvider = provider,
         onDismissRequest = onDismissRequest,
         properties = PopupProperties(focusable = true)
     ) {
-        Box(Modifier.padding(20.dp)) {
+        val sp = rememberScreenPos()
+        Box(Modifier.padding(20.dp).screenPos(sp)) {
             MenuCard(
                 Modifier.graphicsLayer {
-                    val s = 0.55f + 0.45f * a.value
+                    val s = 0.5f + 0.5f * a.value
                     scaleX = s
                     scaleY = s
-                    alpha = (a.value * 2.2f).coerceIn(0f, 1f)
-                    transformOrigin = TransformOrigin(ox, 0f)
+                    alpha = (a.value * 2.4f).coerceIn(0f, 1f)
+                    transformOrigin = TransformOrigin(provider.originX, provider.originY)
                 },
-                content
+                snap,
+                sp.pos,
+                contentAlpha = { ((a.value - 0.3f) / 0.5f).coerceIn(0f, 1f) },
+                content = content
             )
         }
     }
@@ -337,18 +370,39 @@ fun ContextOverlay(
     menu: @Composable ColumnScope.() -> Unit
 ) {
     val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { a.animateTo(1f, Motion.menuIn()) }
+    var snap by remember { mutableStateOf<Backdrop?>(null) }
+    val host = LocalView.current
+    LaunchedEffect(Unit) {
+        launch { snap = captureBackdrop(host) }
+        a.animateTo(1f, Motion.menuIn())
+    }
+    val ready by animateFloatAsState(if (snap != null) 1f else 0f, Motion.fade(220), label = "overlayBlur")
+    val dark = isSystemInDarkTheme()
     Popup(
         popupPositionProvider = ZeroPosition,
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true, clippingEnabled = false)
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .drawBehind { drawRect(Color.Black.copy(alpha = 0.42f * a.value)) }
-                .plainClickable(onDismiss)
-        ) {
+        val screen = rememberScreenPos()
+        val menuPos = rememberScreenPos()
+        Box(Modifier.fillMaxSize().screenPos(screen).plainClickable(onDismiss)) {
+            snap?.let { s ->
+                GlassBackdrop(
+                    s,
+                    screen.pos,
+                    Modifier.matchParentSize().graphicsLayer { alpha = (a.value * ready).coerceIn(0f, 1f) },
+                    blurDp = 22f,
+                    saturation = 1.5f
+                )
+            }
+            Box(
+                Modifier.matchParentSize().drawBehind {
+                    drawRect(
+                        (if (dark) Color.Black else Color(0xFF1C1C1E))
+                            .copy(alpha = (if (dark) 0.34f else 0.16f) * a.value)
+                    )
+                }
+            )
             Layout(
                 modifier = Modifier.fillMaxSize(),
                 content = {
@@ -359,16 +413,21 @@ fun ContextOverlay(
                             scaleY = s
                         }
                     ) { preview() }
-                    MenuCard(
-                        Modifier.graphicsLayer {
-                            val s = 0.7f + 0.3f * a.value
-                            scaleX = s
-                            scaleY = s
-                            alpha = a.value.coerceIn(0f, 1f)
-                            transformOrigin = TransformOrigin(if (menuAtEnd) 1f else 0f, 0f)
-                        },
-                        menu
-                    )
+                    Box(Modifier.screenPos(menuPos)) {
+                        MenuCard(
+                            Modifier.graphicsLayer {
+                                val s = 0.6f + 0.4f * a.value
+                                scaleX = s
+                                scaleY = s
+                                alpha = (a.value * 1.6f).coerceIn(0f, 1f)
+                                transformOrigin = TransformOrigin(if (menuAtEnd) 1f else 0f, 0f)
+                            },
+                            snap,
+                            menuPos.pos,
+                            contentAlpha = { ((a.value - 0.2f) / 0.6f).coerceIn(0f, 1f) },
+                            content = menu
+                        )
+                    }
                 }
             ) { ms, c ->
                 val loose = c.copy(minWidth = 0, minHeight = 0)
@@ -395,35 +454,67 @@ fun ContextOverlay(
 fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val p = LocalPalette.current
     val dark = isSystemInDarkTheme()
+    var snap by remember { mutableStateOf<Backdrop?>(null) }
+    val host = LocalView.current
+    LaunchedEffect(Unit) { snap = captureBackdrop(host) }
     Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (dark) Color(0xFF2C2C2E) else Color(0xFFF2F2F2)),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                title,
-                color = p.label,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)
-            )
-            Hairline()
-            Row(Modifier.fillMaxWidth().height(48.dp)) {
-                Box(
-                    Modifier.weight(1f).fillMaxHeight().iosClickable(onDismiss),
-                    contentAlignment = Alignment.Center
-                ) { Text(stringResource(R.string.cancel), color = p.blue, fontSize = 17.sp) }
-                Box(Modifier.width(Dp.Hairline).fillMaxHeight().background(p.separator))
-                Box(
-                    Modifier.weight(1f).fillMaxHeight().iosClickable(onConfirm),
-                    contentAlignment = Alignment.Center
-                ) { Text(confirmLabel, color = Red, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+        val sp = rememberScreenPos()
+        val a = remember { Animatable(0f) }
+        LaunchedEffect(Unit) { a.animateTo(1f, Motion.menuIn()) }
+        val shape = RoundedCornerShape(14.dp)
+        Box(Modifier.screenPos(sp)) {
+            Box(
+                Modifier
+                    .graphicsLayer {
+                        val s = 1.08f - 0.08f * a.value
+                        scaleX = s
+                        scaleY = s
+                        alpha = (a.value * 2f).coerceIn(0f, 1f)
+                    }
+                    .clip(shape)
+            ) {
+                GlassFill(snap, sp.pos, dark, Modifier.matchParentSize(), blurDp = 30f)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        title,
+                        color = p.label,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)
+                    )
+                    Hairline()
+                    Row(Modifier.fillMaxWidth().height(48.dp)) {
+                        Box(
+                            Modifier.weight(1f).fillMaxHeight().iosClickable(onDismiss),
+                            contentAlignment = Alignment.Center
+                        ) { Text(stringResource(R.string.cancel), color = p.blue, fontSize = 17.sp) }
+                        Box(Modifier.width(Dp.Hairline).fillMaxHeight().background(p.separator))
+                        Box(
+                            Modifier.weight(1f).fillMaxHeight().iosClickable(onConfirm),
+                            contentAlignment = Alignment.Center
+                        ) { Text(confirmLabel, color = Red, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                    }
+                }
             }
         }
     }
+}
+
+/** Row highlight inside glass menus: translucent so the blur stays visible. */
+fun Modifier.menuClickable(onClick: () -> Unit): Modifier = composed {
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val dark = isSystemInDarkTheme()
+    val base = if (dark) Color(0x30FFFFFF) else Color(0x1C000000)
+    val color by animateColorAsState(
+        if (pressed) base else base.copy(alpha = 0f),
+        if (pressed) snap<Color>() else Motion.fade(280),
+        label = "menuRow"
+    )
+    this
+        .drawBehind { drawRect(color) }
+        .clickable(interactionSource = src, indication = null, onClick = onClick)
 }
 
 @Composable
@@ -433,22 +524,19 @@ fun IosMenuItem(
     trailingIcon: (@Composable () -> Unit)? = null
 ) {
     val p = LocalPalette.current
-    Box(Modifier.fillMaxWidth().iosClickable(onClick)) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 46.dp).padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CompositionLocalProvider(LocalContentColor provides p.label) {
-                ProvideTextStyle(TextStyle(fontSize = 17.sp)) {
-                    Box(Modifier.weight(1f)) { text() }
-                }
-            }
-            if (trailingIcon != null) {
-                Spacer(Modifier.width(12.dp))
-                trailingIcon()
+    Row(
+        Modifier.fillMaxWidth().menuClickable(onClick).heightIn(min = 46.dp).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CompositionLocalProvider(LocalContentColor provides p.label) {
+            ProvideTextStyle(TextStyle(fontSize = 17.sp)) {
+                Box(Modifier.weight(1f)) { text() }
             }
         }
-        Hairline(Modifier.align(Alignment.BottomStart))
+        if (trailingIcon != null) {
+            Spacer(Modifier.width(12.dp))
+            trailingIcon()
+        }
     }
 }
 
@@ -465,7 +553,7 @@ fun IosMenuRow(
 ) {
     val p = LocalPalette.current
     Row(
-        Modifier.fillMaxWidth().iosClickable(onClick).heightIn(min = 46.dp).padding(horizontal = 16.dp),
+        Modifier.fillMaxWidth().menuClickable(onClick).heightIn(min = 46.dp).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterStart) {

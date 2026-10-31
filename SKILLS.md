@@ -99,3 +99,19 @@
 ### Build fix (after first CI run)
 - Cause: ui/*.kt were missing the imports androidx.compose.ui.res.stringResource and app.ios.messages.R (import insertion regex had not matched the first line of each file). Imports added to SimUi, NewMessageScreen, ChatScreen, SettingsScreen, Components, ConversationsScreen. All other CI errors (Text overload ambiguity, append ambiguity) were follow-ups of the same cause.
 - Lesson: when adding stringResource to a file, always verify both imports exist.
+
+## Task: Frosted-glass menus, blur overlays, smoother menu motion (v2.1)
+
+### Done
+- ui/Glass.kt (new): Backdrop snapshot via PixelCopy (half resolution), GlassBackdrop (RenderEffect blur + saturation, aligned to screen position), GlassFill (blur + translucent tint, solid fallback until the snapshot is ready), ScreenPos tracker for popup/dialog windows
+- IosMenu: frosted card, transform origin computed from the real anchor position, content fades in after the card expands
+- ContextOverlay: whole screen blurs + dims behind the preview, menu card is frosted glass
+- IosConfirm: frosted alert with iOS pop-in scale
+- IosMenuItem/IosMenuRow: translucent press highlight (old gray was invisible in dark mode), hairline under items removed
+- Version 2.1 (versionCode 9)
+
+### Files touched
+- ui/Glass.kt (new), ui/Components.kt, app/build.gradle.kts
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
