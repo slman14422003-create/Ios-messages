@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.ContactsContract
+import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.Telephony
 import android.telephony.SmsManager
 
@@ -111,12 +112,11 @@ class SmsRepository(private val ctx: Context) {
         if (!has(Manifest.permission.READ_CONTACTS)) return emptyList()
         val out = ArrayList<Contact>()
         val seen = HashSet<String>()
-        val phone = ContactsContract.CommonDataKinds.Phone
         try {
             cr.query(
-                phone.CONTENT_URI,
-                arrayOf(phone.CONTACT_ID, phone.DISPLAY_NAME, phone.NUMBER),
-                null, null, phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC"
+                Phone.CONTENT_URI,
+                arrayOf(Phone.CONTACT_ID, Phone.DISPLAY_NAME, Phone.NUMBER),
+                null, null, Phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC"
             )?.use { c ->
                 while (c.moveToNext()) {
                     val name = c.getString(1) ?: continue
