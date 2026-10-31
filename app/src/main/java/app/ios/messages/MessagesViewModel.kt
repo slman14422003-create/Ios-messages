@@ -13,6 +13,7 @@ import app.ios.messages.data.Message
 import app.ios.messages.data.SmsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,7 +42,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
-            refresh()
+            refresh(debounce = true)
         }
     }
 
@@ -50,9 +51,10 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
-    fun refresh() {
+    fun refresh(debounce: Boolean = false) {
         job?.cancel()
         job = viewModelScope.launch(Dispatchers.IO) {
+            if (debounce) delay(250)
             _hasPermission.value = repo.canRead()
             _isDefault.value = repo.isDefault()
             val list = repo.conversations()

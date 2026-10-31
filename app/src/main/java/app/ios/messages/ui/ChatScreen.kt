@@ -20,16 +20,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,19 +53,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ios.messages.ChatTarget
@@ -86,24 +92,22 @@ private sealed interface ChatItem {
     }
 }
 
-private const val GROUP_GAP = 60_000L
 private const val TIME_GAP = 60L * 60_000L
 
+/** Like iOS: consecutive messages from the same sender form a group; only the last one gets a tail. */
 private fun buildItems(msgs: List<Message>): List<ChatItem> {
-    val out = ArrayList<ChatItem>()
+    val out = ArrayList<ChatItem>(msgs.size + 8)
     var prev: Message? = null
-    var lastWasTime = false
     msgs.forEachIndexed { i, m ->
         val p = prev
-        lastWasTime = false
-        if (p == null || m.date - p.date > TIME_GAP) {
+        val header = p == null || m.date - p.date > TIME_GAP
+        if (header) {
             val (d, t) = DateFmt.chat(m.date)
             out += ChatItem.Time(d, t, m.id)
-            lastWasTime = true
         }
         val next = msgs.getOrNull(i + 1)
-        val tight = p != null && !lastWasTime && p.mine == m.mine && m.date - p.date < GROUP_GAP
-        val tail = next == null || next.mine != m.mine || next.date - m.date >= GROUP_GAP
+        val tight = p != null && !header && p.mine == m.mine
+        val tail = next == null || next.mine != m.mine || next.date - m.date > TIME_GAP
         out += ChatItem.Bubble(m, tail, tight)
         prev = m
     }
@@ -122,141 +126,147 @@ fun ChatScreen(
 ) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
+    val density = LocalDensity.current
     val composeMode = target.address == null
     val name = target.name ?: target.address ?: ""
     var to by rememberSaveable { mutableStateOf("") }
     var text by rememberSaveable { mutableStateOf("") }
-    val items = remember(messages) { buildItems(messages) }
+    val rev = remember(messages) { buildItems(messages).asReversed() }
     val listState = rememberLazyListState()
-    var first by remember { mutableStateOf(true) }
+    var inputH by remember { mutableIntStateOf(0) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val barH = if (composeMode) 88.dp else 86.dp
+    val barH = if (composeMode) 88.dp else 94.dp
     val toFocus = remember { FocusRequester() }
 
-    LaunchedEffect(items.size) {
-        if (items.isNotEmpty()) {
-            if (first) {
-                listState.scrollToItem(items.lastIndex); first = false
-            } else listState.animateScrollToItem(items.lastIndex)
-        }
-    }
+    val newestKey = rev.firstOrNull()?.key
+    LaunchedEffect(newestKey) { if (rev.isNotEmpty()) listState.animateScrollToItem(0) }
     LaunchedEffect(composeMode) { if (composeMode) runCatching { toFocus.requestFocus() } }
 
-    Column(Modifier.fillMaxSize().background(p.bg).imePadding()) {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = statusH + barH + 8.dp, bottom = 8.dp)
-            ) {
-                items(items, key = { it.key }) { item ->
-                    when (item) {
-                        is ChatItem.Time -> TimeHeader(item)
-                        is ChatItem.Bubble -> BubbleRow(item, isDefault, onDeleteMessage)
-                        is ChatItem.Status -> Text(
-                            item.text,
-                            color = p.secondary,
-                            fontSize = 12.sp,
-                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, end = 16.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.End
-                        )
-                    }
+    Box(Modifier.fillMaxSize().background(p.bg).imePadding()) {
+        // Newest message at index 0 + reverseLayout => opens at the bottom with no scroll jump.
+        LazyColumn(
+            state = listState,
+            reverseLayout = true,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                top = statusH + barH + 6.dp,
+                bottom = with(density) { inputH.toDp() } + 6.dp
+            )
+        ) {
+            items(rev, key = { it.key }, contentType = { it::class }) { item ->
+                when (item) {
+                    is ChatItem.Time -> TimeHeader(item)
+                    is ChatItem.Bubble -> BubbleRow(item, isDefault, onDeleteMessage)
+                    is ChatItem.Status -> Text(
+                        item.text,
+                        color = p.secondary,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth().padding(top = 3.dp, end = 16.dp)
+                    )
                 }
             }
+        }
 
-            // Translucent navigation bar
-            Column(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .background(p.bar)
-                    .statusBarsPadding()
-            ) {
-                if (composeMode) {
-                    Box(Modifier.fillMaxWidth().height(44.dp)) {
-                        Text(
-                            "New Message",
-                            color = p.label,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.align(Alignment.Center)
-                        )
-                        Text(
-                            "Cancel",
-                            color = p.blue,
-                            fontSize = 17.sp,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .plainClickable(onBack)
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        )
-                    }
-                    Hairline()
-                    Row(
-                        Modifier.fillMaxWidth().height(43.dp).padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+        // Header: soft fade instead of a hard bar, so message text never shows through awkwardly.
+        Column(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        0f to p.bg.copy(alpha = 0.97f),
+                        0.82f to p.bg.copy(alpha = 0.95f),
+                        1f to p.bg.copy(alpha = 0f)
+                    )
+                )
+                .statusBarsPadding()
+        ) {
+            if (composeMode) {
+                Box(Modifier.fillMaxWidth().height(44.dp)) {
+                    Text(
+                        "New Message",
+                        color = p.label,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                    Text(
+                        "Cancel",
+                        color = p.blue,
+                        fontSize = 17.sp,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .plainClickable(onBack)
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("To:", color = p.secondary, fontSize = 17.sp)
+                    Spacer(Modifier.width(8.dp))
+                    BasicTextField(
+                        value = to,
+                        onValueChange = { to = it },
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 17.sp, color = p.label),
+                        cursorBrush = SolidColor(p.blue),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.weight(1f).focusRequester(toFocus)
+                    )
+                }
+                Hairline()
+            } else {
+                Box(Modifier.fillMaxWidth().height(barH)) {
+                    GlassCircle(
+                        44.dp,
+                        Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
+                        onClick = onBack
+                    ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
+                    Column(
+                        Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("To:", color = p.secondary, fontSize = 17.sp)
-                        Spacer(Modifier.width(8.dp))
-                        BasicTextField(
-                            value = to,
-                            onValueChange = { to = it },
-                            singleLine = true,
-                            textStyle = TextStyle(fontSize = 17.sp, color = p.label),
-                            cursorBrush = SolidColor(p.blue),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            modifier = Modifier.weight(1f).focusRequester(toFocus)
-                        )
-                    }
-                } else {
-                    Box(Modifier.fillMaxWidth().height(86.dp)) {
-                        Box(
-                            Modifier
-                                .align(Alignment.CenterStart)
-                                .plainClickable(onBack)
-                                .padding(start = 10.dp, end = 24.dp, top = 24.dp, bottom = 24.dp)
-                        ) { ChevronLeft(p.blue) }
-                        Column(
-                            Modifier.align(Alignment.Center),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Avatar(name, 44.dp)
-                            Spacer(Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    name,
-                                    color = p.label,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 200.dp)
-                                )
-                                Spacer(Modifier.width(3.dp))
-                                ChevronRight(p.secondary, width = 4, height = 7, stroke = 1.2f)
-                            }
+                        Avatar(name, 48.dp)
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                name,
+                                color = p.label,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 200.dp)
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            ChevronRight(p.secondary, width = 5, height = 8, stroke = 1.3f)
                         }
                     }
                 }
-                Hairline()
             }
         }
 
-        InputBar(
-            text = text,
-            onChange = { text = it },
-            onPlus = {
-                Toast.makeText(ctx, "Attachments (MMS) aren't supported yet", Toast.LENGTH_SHORT).show()
-            },
-            onSend = {
-                val body = text.trim()
-                val addr = target.address ?: to.trim()
-                if (body.isNotEmpty() && addr.isNotEmpty()) {
-                    onSend(addr, body)
-                    text = ""
+        Box(Modifier.align(Alignment.BottomCenter)) {
+            InputBar(
+                text = text,
+                onChange = { text = it },
+                onHeight = { inputH = it },
+                onPlus = {
+                    Toast.makeText(ctx, "Attachments (MMS) aren't supported yet", Toast.LENGTH_SHORT).show()
+                },
+                onSend = {
+                    val body = text.trim()
+                    val addr = target.address ?: to.trim()
+                    if (body.isNotEmpty() && addr.isNotEmpty()) {
+                        onSend(addr, body)
+                        text = ""
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 }
 
@@ -272,8 +282,8 @@ private fun TimeHeader(t: ChatItem.Time) {
         label,
         color = p.secondary,
         fontSize = 11.sp,
-        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp)
     )
 }
 
@@ -286,11 +296,12 @@ private fun BubbleRow(b: ChatItem.Bubble, isDefault: Boolean, onDelete: (Long) -
     var menu by remember { mutableStateOf(false) }
     val maxW = (LocalConfiguration.current.screenWidthDp * 0.76f).dp
     val shape = remember(mine, b.tail) { BubbleShape(mine, b.tail) }
+    val interaction = remember { MutableInteractionSource() }
 
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(top = if (b.tight) 2.dp else 8.dp, start = 8.dp, end = 8.dp),
+            .padding(top = if (b.tight) 2.dp else 9.dp, start = 8.dp, end = 8.dp),
         contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart
     ) {
         Box {
@@ -303,7 +314,7 @@ private fun BubbleRow(b: ChatItem.Bubble, isDefault: Boolean, onDelete: (Long) -
                     .widthIn(max = maxW)
                     .background(if (mine) SentBubble else p.received, shape)
                     .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                        interactionSource = interaction,
                         indication = null,
                         onClick = {},
                         onLongClick = { menu = true }
@@ -331,68 +342,76 @@ private fun BubbleRow(b: ChatItem.Bubble, isDefault: Boolean, onDelete: (Long) -
     }
 }
 
+/** Floating iOS 26 style input: glass "+" circle and glass pill, over a soft gradient. */
 @Composable
-private fun InputBar(text: String, onChange: (String) -> Unit, onPlus: () -> Unit, onSend: () -> Unit) {
+private fun InputBar(
+    text: String,
+    onChange: (String) -> Unit,
+    onHeight: (Int) -> Unit,
+    onPlus: () -> Unit,
+    onSend: () -> Unit
+) {
     val p = LocalPalette.current
-    Column(Modifier.fillMaxWidth().background(p.bg).navigationBarsPadding()) {
-        Hairline()
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.Bottom
+    val pill = RoundedCornerShape(22.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .onSizeChanged { onHeight(it.height) }
+            .background(
+                Brush.verticalGradient(
+                    0f to p.bg.copy(alpha = 0f),
+                    0.35f to p.bg.copy(alpha = 0.95f),
+                    1f to p.bg
+                )
+            )
+            .navigationBarsPadding()
+            .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        GlassCircle(44.dp, onClick = onPlus) { PlusIcon(p.secondary) }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier
+                .weight(1f)
+                .heightIn(min = 44.dp)
+                .clip(pill)
+                .background(p.glass)
+                .border(Dp.Hairline, p.separator, pill)
         ) {
-            Box(
-                Modifier
-                    .padding(bottom = 1.dp)
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(p.fieldFill)
-                    .plainClickable(onPlus),
-                contentAlignment = Alignment.Center
-            ) { PlusIcon(p.secondary) }
-            Spacer(Modifier.width(8.dp))
-            Box(
-                Modifier
-                    .weight(1f)
-                    .heightIn(min = 36.dp)
-                    .border(1.dp, p.outline, RoundedCornerShape(18.dp))
-            ) {
-                BasicTextField(
-                    value = text,
-                    onValueChange = onChange,
-                    maxLines = 6,
-                    textStyle = TextStyle(fontSize = 17.sp, color = p.label, lineHeight = 22.sp),
-                    cursorBrush = SolidColor(p.blue),
-                    decorationBox = { inner ->
-                        Row(verticalAlignment = Alignment.Bottom) {
+            BasicTextField(
+                value = text,
+                onValueChange = onChange,
+                maxLines = 6,
+                textStyle = TextStyle(fontSize = 17.sp, color = p.label, lineHeight = 22.sp),
+                cursorBrush = SolidColor(p.blue),
+                decorationBox = { inner ->
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .padding(start = 16.dp, end = 6.dp, top = 11.dp, bottom = 11.dp)
+                        ) {
+                            if (text.isEmpty()) Text("Text Message", color = p.secondary, fontSize = 17.sp)
+                            inner()
+                        }
+                        AnimatedVisibility(
+                            visible = text.isNotBlank(),
+                            enter = fadeIn() + scaleIn(initialScale = 0.6f),
+                            exit = fadeOut() + scaleOut(targetScale = 0.6f)
+                        ) {
                             Box(
                                 Modifier
-                                    .weight(1f)
-                                    .padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
-                            ) {
-                                if (text.isEmpty()) {
-                                    Text("Text Message", color = p.tertiary, fontSize = 17.sp)
-                                }
-                                inner()
-                            }
-                            AnimatedVisibility(
-                                visible = text.isNotBlank(),
-                                enter = fadeIn() + scaleIn(initialScale = 0.6f),
-                                exit = fadeOut() + scaleOut(targetScale = 0.6f)
-                            ) {
-                                Box(
-                                    Modifier
-                                        .padding(end = 3.dp, bottom = 3.dp)
-                                        .size(30.dp)
-                                        .clip(CircleShape)
-                                        .background(SentBubble)
-                                        .plainClickable(onSend),
-                                    contentAlignment = Alignment.Center
-                                ) { SendArrow(Color.White) }
-                            }
+                                    .padding(end = 5.dp, bottom = 5.dp)
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(SentBubble)
+                                    .plainClickable(onSend),
+                                contentAlignment = Alignment.Center
+                            ) { SendArrow(Color.White) }
                         }
                     }
-                )
-            }
+                }
+            )
         }
     }
 }

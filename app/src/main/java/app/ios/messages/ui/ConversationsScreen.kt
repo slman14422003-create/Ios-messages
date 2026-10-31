@@ -62,7 +62,8 @@ fun ConversationsScreen(
     onCompose: () -> Unit,
     onDelete: (Conversation) -> Unit,
     onMakeDefault: () -> Unit,
-    onGrant: () -> Unit
+    onGrant: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val p = LocalPalette.current
     var query by rememberSaveable { mutableStateOf("") }
@@ -95,7 +96,10 @@ fun ConversationsScreen(
 
             if (!hasPermission) {
                 item(key = "perm") {
-                    Banner("Messages needs permission to read your SMS.", "Allow", onGrant)
+                    Banner(
+                        "Messages needs permission to read your SMS. If Android says it is blocked: App Settings, then the ⋮ menu, then Allow restricted settings.",
+                        "Allow", onGrant, "Open App Settings", onOpenSettings
+                    )
                 }
             } else if (!isDefault) {
                 item(key = "default") {
@@ -201,7 +205,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun Banner(text: String, action: String, onClick: () -> Unit) {
+private fun Banner(text: String, action: String, onClick: () -> Unit, second: String? = null, onSecond: (() -> Unit)? = null) {
     val p = LocalPalette.current
     Column(
         Modifier
@@ -220,6 +224,16 @@ private fun Banner(text: String, action: String, onClick: () -> Unit) {
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.plainClickable(onClick)
         )
+        if (second != null && onSecond != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                second,
+                color = p.blue,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.plainClickable(onSecond)
+            )
+        }
     }
 }
 

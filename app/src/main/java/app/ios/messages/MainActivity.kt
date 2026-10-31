@@ -13,20 +13,25 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.background
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.ios.messages.ui.ChatScreen
@@ -91,6 +96,17 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
     val shown = chat ?: lastChat
     LaunchedEffect(chat) { if (chat != null) lastChat = chat }
 
+    // iOS push/pop: the chat slides in, the list moves left at ~30% speed. Driven by graphicsLayer
+    // so the animation never triggers recomposition.
+    val progress = remember { Animatable(if (chat != null) 1f else 0f) }
+    LaunchedEffect(chat != null) {
+        progress.animateTo(
+            if (chat != null) 1f else 0f,
+            tween(if (chat != null) 380 else 320, easing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))
+        )
+    }
+    val chatVisible by remember { derivedStateOf { progress.value > 0.001f } }
+
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { vm.onPermissionsChanged() }
@@ -111,49 +127,53 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onConsumed: () -
         vm.closeChat()
     }
 
-    Box(Modifier.fillMaxSize()) {
-        ConversationsScreen(
-            conversations = conversations,
-            isDefault = isDefault,
-            hasPermission = hasPermission,
-            onOpen = { c ->
-                chat = ChatTarget(c.threadId, c.address, c.name)
-            },
-            onCompose = { chat = ChatTarget(null, null, null) },
-            onDelete = { vm.deleteThread(it.threadId) },
-            onMakeDefault = {
-                val rm = ctx.getSystemService(RoleManager::class.java)
-                if (rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
-                    roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_SMS))
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -progress.value * size.width * 0.3f }) {
+            ConversationsScreen(
+                conversations = conversations,
+                isDefault = isDefault,
+                hasPermission = hasPermission,
+                onOpen = { c -> chat = ChatTarget(c.threadId, c.address, c.name) },
+                onCompose = { chat = ChatTarget(null, null, null) },
+                onDelete = { vm.deleteThread(it.threadId) },
+                onMakeDefault = {
+                    val rm = ctx.getSystemService(RoleManager::class.java)
+                    if (rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
+                        roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_SMS))
+                    }
+                },
+                onGrant = { permLauncher.launch(requiredPermissions()) },
+                onOpenSettings = {
+                    ctx.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName))
+                    )
                 }
-            },
-            onGrant = { permLauncher.launch(requiredPermissions()) }
-        )
+            )
+        }
 
-        AnimatedVisibility(
-            visible = chat != null,
-            enter = slideInHorizontally(tween(350)) { it },
-            exit = slideOutHorizontally(tween(300)) { it }
-        ) {
+        if (chatVisible || chat != null) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = progress.value * 0.25f }.background(Color.Black))
             shown?.let { t ->
                 LaunchedEffect(t) {
                     if (t.address != null || t.threadId != null) vm.openChat(t.threadId, t.address)
                 }
-                ChatScreen(
-                    target = t,
-                    messages = messages,
-                    isDefault = isDefault,
-                    onBack = {
-                        chat = null
-                        vm.closeChat()
-                    },
-                    onSend = { addr, body ->
-                        vm.send(addr, body) { tid ->
-                            chat = ChatTarget(tid, addr, vm.nameFor(addr))
-                        }
-                    },
-                    onDeleteMessage = vm::deleteMessage
-                )
+                Box(Modifier.fillMaxSize().graphicsLayer { translationX = (1f - progress.value) * size.width }) {
+                    ChatScreen(
+                        target = t,
+                        messages = messages,
+                        isDefault = isDefault,
+                        onBack = {
+                            chat = null
+                            vm.closeChat()
+                        },
+                        onSend = { addr, body ->
+                            vm.send(addr, body) { tid ->
+                                chat = ChatTarget(tid, addr, vm.nameFor(addr))
+                            }
+                        },
+                        onDeleteMessage = vm::deleteMessage
+                    )
+                }
             }
         }
     }

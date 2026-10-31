@@ -3,6 +3,7 @@ package app.ios.messages.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -132,4 +133,19 @@ fun Avatar(name: String, size: Dp) {
             }
         }
     }
+}
+
+/** iOS 26 style floating "glass" circular button. */
+@Composable
+fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    Box(
+        modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(p.glass)
+            .border(Dp.Hairline, p.separator, CircleShape)
+            .plainClickable(onClick),
+        contentAlignment = Alignment.Center
+    ) { content() }
 }

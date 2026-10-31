@@ -41,6 +41,40 @@ class SmsRepository(private val ctx: Context) {
 
     fun conversations(): List<Conversation> {
         if (!canRead()) return emptyList()
+        val fast = try { fastConversations() } catch (e: Exception) { null }
+        if (!fast.isNullOrEmpty()) return fast
+        return slowConversations()
+    }
+
+    /** Uses the thread table (one row per conversation) instead of scanning every SMS. */
+    private fun fastConversations(): List<Conversation> {
+        val addrs = HashMap<Long, String>()
+        cr.query(Uri.parse("content://mms-sms/canonical-addresses"), arrayOf("_id", "address"), null, null, null)
+            ?.use { c -> while (c.moveToNext()) addrs[c.getLong(0)] = c.getString(1) ?: "" }
+        val unread = HashMap<Long, Int>()
+        cr.query(smsUri, arrayOf("thread_id"), "read=0 AND type=1", null, null)
+            ?.use { c -> while (c.moveToNext()) { val t = c.getLong(0); unread[t] = (unread[t] ?: 0) + 1 } }
+        val out = ArrayList<Conversation>()
+        cr.query(
+            Uri.parse("content://mms-sms/conversations?simple=true"),
+            arrayOf("_id", "date", "recipient_ids", "snippet"),
+            null, null, "date DESC"
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val tid = c.getLong(0)
+                val list = (c.getString(2) ?: "").trim().split(" ")
+                    .mapNotNull { it.toLongOrNull() }.mapNotNull { addrs[it] }
+                if (list.isEmpty()) continue
+                out += Conversation(
+                    tid, list[0], list.joinToString(", ") { contactName(it) ?: it },
+                    c.getString(3) ?: "", c.getLong(1), unread[tid] ?: 0
+                )
+            }
+        }
+        return out
+    }
+
+    private fun slowConversations(): List<Conversation> {
         val map = LinkedHashMap<Long, Conversation>()
         val unread = HashMap<Long, Int>()
         cr.query(
@@ -77,7 +111,7 @@ class SmsRepository(private val ctx: Context) {
         cr.query(
             smsUri,
             arrayOf("_id", "body", "date", "type", "read"),
-            "thread_id=?", arrayOf(threadId.toString()), "date ASC"
+            "thread_id=?", arrayOf(threadId.toString()), "date DESC LIMIT 300"
         )?.use { c ->
             while (c.moveToNext()) {
                 out += Message(
@@ -89,6 +123,7 @@ class SmsRepository(private val ctx: Context) {
                 )
             }
         }
+        out.reverse()
         return out
     }
 

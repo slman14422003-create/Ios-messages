@@ -26,7 +26,8 @@ class Palette(
     val pressed: Color,
     val outline: Color,
     val avatarTop: Color,
-    val avatarBottom: Color
+    val avatarBottom: Color,
+    val glass: Color
 )
 
 /** iOS shows SMS bubbles green. Change to `Blue` below if you prefer iMessage-blue. */
@@ -47,7 +48,8 @@ val LightPalette = Palette(
     pressed = Color(0xFFD1D1D6),
     outline = Color(0xFFC6C6C8),
     avatarTop = Color(0xFFA6AAB4),
-    avatarBottom = Color(0xFF828690)
+    avatarBottom = Color(0xFF828690),
+    glass = Color(0xF0F2F2F7)
 )
 
 val DarkPalette = Palette(
@@ -64,7 +66,8 @@ val DarkPalette = Palette(
     pressed = Color(0xFF2C2C2E),
     outline = Color(0xFF3A3A3C),
     avatarTop = Color(0xFF6D717A),
-    avatarBottom = Color(0xFF4B4E55)
+    avatarBottom = Color(0xFF4B4E55),
+    glass = Color(0xF01C1C1E)
 )
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }
