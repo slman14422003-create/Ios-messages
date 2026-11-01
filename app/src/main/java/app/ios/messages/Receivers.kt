@@ -27,10 +27,19 @@ internal fun subIdOf(intent: Intent): Int {
 /** Incoming SMS (only delivered here while we are the default SMS app). */
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
         val msgs = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (msgs.isNullOrEmpty()) return
         val address = msgs[0].displayOriginatingAddress ?: return
+        if (app.ios.messages.data.Blocking.isBlocked(context, address)) return
         val body = msgs.joinToString("") { it.displayMessageBody ?: "" }
         val sub = subIdOf(intent)
         val v = ContentValues().apply {
@@ -53,6 +62,14 @@ class SmsReceiver : BroadcastReceiver() {
 
 class MmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.WAP_PUSH_DELIVER_ACTION) return
         val data = intent.getByteArrayExtra("data") ?: return
         try {
@@ -64,6 +81,14 @@ class MmsReceiver : BroadcastReceiver() {
 
 class MmsSentReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         val id = intent.getLongExtra("mms_id", -1L)
         if (id < 0) return
         Mms.setBox(context, id, if (resultCode == Activity.RESULT_OK) 2 else 5)
@@ -73,6 +98,14 @@ class MmsSentReceiver : BroadcastReceiver() {
 
 class MmsDownloadedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         val path = intent.getStringExtra("file") ?: return
         val from = intent.getStringExtra("from") ?: ""
         val ok = resultCode == Activity.RESULT_OK
@@ -97,6 +130,14 @@ class HeadlessSmsSendService : Service() {
 /** Radio answered for an outgoing SMS: flip the outbox row to sent / failed. */
 class SmsSentReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         val id = intent.getLongExtra("sms_id", -1L)
         if (id < 0) return
         val ok = resultCode == Activity.RESULT_OK
@@ -118,6 +159,14 @@ class SmsSentReceiver : BroadcastReceiver() {
 /** "Copy code" action on verification-code notifications. */
 class CopyCodeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         val code = intent.getStringExtra("code") ?: return
         val cm = context.getSystemService(ClipboardManager::class.java)
         val clip = ClipData.newPlainText("Verification code", code)
@@ -133,6 +182,14 @@ class CopyCodeReceiver : BroadcastReceiver() {
 
 class MarkReadReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         val tid = intent.getLongExtra("thread_id", -1L)
         val address = intent.getStringExtra("address") ?: return
         val pending = goAsync()
@@ -150,12 +207,28 @@ class MarkReadReceiver : BroadcastReceiver() {
 
 class NotificationDismissedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         intent.getStringExtra("address")?.let { Notifier.forget(it) }
     }
 }
 
 class ReplyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handle(context, intent)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "receiver failed", e)
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent) {
         val address = intent.getStringExtra("address") ?: return
         val text = android.app.RemoteInput.getResultsFromIntent(intent)
             ?.getCharSequence(Notifier.KEY_REPLY)?.toString()?.trim().orEmpty()

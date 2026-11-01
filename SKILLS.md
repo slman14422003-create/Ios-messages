@@ -169,3 +169,15 @@
 
 ### Not verified
 - Build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: iOS features, crash hardening, smoothness (v2.7)
+
+### Done
+- Mark as Unread (long-press menu on a read conversation): SmsRepository.markUnread, MessagesViewModel.markUnread
+- Block / Unblock this Caller in the contact card: data/Blocking.kt (BlockedNumberContract); SmsReceiver drops messages from blocked numbers
+- Chat: scroll-to-bottom glass button, SMS length counter (chars and segments, GSM-7 vs Unicode), haptic feedback when menus open
+- Crash hardening: every BroadcastReceiver body runs inside try/catch; live blur disables itself after any render error (LiveBlur.broken) and falls back to plain content; backdrop capture catches OOM and any failure
+- Conversation list items use contentType
+
+### Not verified
+- Build with the GitHub Actions workflow and send the log if anything fails

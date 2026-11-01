@@ -494,6 +494,22 @@ private fun ChatScreenBody(
             } else wrongSim = false
         }
 
+        val showDown by remember { androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 4 } }
+        val downScope = androidx.compose.runtime.rememberCoroutineScope()
+        val downDensity = LocalDensity.current
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showDown,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 14.dp, bottom = with(downDensity) { inputH.toDp() } + 10.dp),
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.6f),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.6f)
+        ) {
+            GlassCircle(40.dp, Modifier, onClick = { downScope.launch { listState.animateScrollToItem(0) } }) {
+                ChevronLeft(p.blue, Modifier.graphicsLayer { rotationZ = -90f })
+            }
+        }
+
         Box(Modifier.align(Alignment.BottomCenter)) {
             InputBar(
                 text = text,
@@ -860,6 +876,18 @@ private fun InputBar(
                 ) { Text("\u00D7", color = Color.White, fontSize = 15.sp) }
             }
         }
+        if (text.length >= 100) {
+            val uni = text.any { it.code > 127 }
+            val single = if (uni) 70 else 160
+            val multi = if (uni) 67 else 153
+            val seg = if (text.length <= single) 1 else (text.length + multi - 1) / multi
+            Text(
+                "${text.length} · $seg",
+                color = p.secondary,
+                fontSize = 11.sp,
+                modifier = Modifier.align(Alignment.End).padding(end = 22.dp, top = 4.dp)
+            )
+        }
         Row(
             Modifier.padding(
                 start = 12.dp, end = 12.dp,
@@ -1018,6 +1046,8 @@ private fun ContactSheet(name: String, address: String, onDismiss: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val contactUri = remember(address) { findContactUri(ctx, address) }
+    val canBlock = remember { app.ios.messages.data.Blocking.canBlock(ctx) }
+    var blocked by remember(address) { mutableStateOf(app.ios.messages.data.Blocking.isBlocked(ctx, address)) }
     IosAlert(
         title = name,
         message = if (name != address) address else null,
@@ -1055,6 +1085,28 @@ private fun ContactSheet(name: String, address: String, onDismiss: () -> Unit) {
             ContactTile(stringResource(R.string.copy_number), Modifier.weight(1f), { CopyIcon(p.blue) }) {
                 clipboard.setText(AnnotatedString(address))
                 onDismiss()
+            }
+        }
+        if (canBlock) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(p.fieldFill)
+                    .iosClickable {
+                        val ok = if (blocked) app.ios.messages.data.Blocking.unblock(ctx, address)
+                        else app.ios.messages.data.Blocking.block(ctx, address)
+                        if (ok) blocked = !blocked
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    stringResource(if (blocked) R.string.unblock_caller else R.string.block_caller),
+                    color = if (blocked) p.blue else Red,
+                    fontSize = 16.sp
+                )
             }
         }
     }

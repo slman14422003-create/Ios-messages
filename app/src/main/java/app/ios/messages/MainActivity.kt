@@ -268,6 +268,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 onSettings = { settingsOpen = true },
                 onDelete = { vm.deleteThreads(it) },
                 onMarkRead = { vm.markRead(it) },
+                onMarkUnread = { vm.markUnread(it) },
                 onTogglePin = { vm.togglePin(it) },
                 onToggleMute = { vm.toggleMute(it) },
                 onMakeDefault = {

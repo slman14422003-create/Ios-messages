@@ -88,6 +88,7 @@ fun ConversationsScreen(
     onSettings: () -> Unit,
     onDelete: (List<Long>) -> Unit,
     onMarkRead: (List<Long>) -> Unit,
+    onMarkUnread: (List<Long>) -> Unit = {},
     onTogglePin: (Long) -> Unit,
     onToggleMute: (Long) -> Unit,
     onMakeDefault: () -> Unit,
@@ -221,7 +222,7 @@ fun ConversationsScreen(
                 item(key = "pins_sep") { Hairline(Modifier.padding(start = 16.dp)) }
             }
 
-            items(rest, key = { it.threadId }) { c ->
+            items(rest, key = { it.threadId }, contentType = { "conv" }) { c ->
                 val state = rememberSwipeToDismissBoxState(
                     positionalThreshold = { it * 0.5f },
                     confirmValueChange = { v ->
@@ -326,6 +327,14 @@ fun ConversationsScreen(
                         onClick = {
                             rowMenu = null
                             onMarkRead(listOf(menuConv.threadId))
+                        }
+                    )
+                } else if (isDefault && menuConv.threadId >= 0) {
+                    IosMenuItem(
+                        text = { Text(stringResource(R.string.mark_as_unread)) },
+                        onClick = {
+                            rowMenu = null
+                            onMarkUnread(listOf(menuConv.threadId))
                         }
                     )
                 }

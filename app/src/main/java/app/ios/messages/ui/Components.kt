@@ -313,8 +313,10 @@ fun IosMenu(
     var alive by remember { mutableStateOf(false) }
     var snap by remember { mutableStateOf<Backdrop?>(null) }
     val host = LocalView.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     LaunchedEffect(expanded) {
         if (expanded) {
+            runCatching { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove) }
             alive = true
             launch { snap = captureBackdrop(host) }
             a.animateTo(1f, Motion.menuIn())
@@ -372,7 +374,9 @@ fun ContextOverlay(
     val a = remember { Animatable(0f) }
     var snap by remember { mutableStateOf<Backdrop?>(null) }
     val host = LocalView.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     LaunchedEffect(Unit) {
+        runCatching { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) }
         launch { snap = captureBackdrop(host) }
         a.animateTo(1f, Motion.menuIn())
     }

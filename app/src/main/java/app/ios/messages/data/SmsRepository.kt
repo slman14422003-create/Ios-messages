@@ -324,6 +324,22 @@ class SmsRepository(private val ctx: Context) {
         }
     }
 
+    /** Marks the newest incoming message of the thread as unread (iOS "Mark as Unread"). */
+    fun markUnread(threadId: Long) {
+        if (!isDefault()) return
+        try {
+            var id = -1L
+            cr.query(
+                smsUri, arrayOf("_id"), "thread_id=? AND type=1", arrayOf(threadId.toString()), "date DESC LIMIT 1"
+            )?.use { if (it.moveToFirst()) id = it.getLong(0) }
+            if (id >= 0) {
+                val v = ContentValues().apply { put("read", 0); put("seen", 0) }
+                cr.update(smsUri, v, "_id=?", arrayOf(id.toString()))
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     fun deleteThread(threadId: Long) {
         if (!isDefault()) return
         try {

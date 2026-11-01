@@ -155,6 +155,13 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun markUnread(ids: List<Long>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            ids.forEach { repo.markUnread(it) }
+            refresh()
+        }
+    }
+
     fun deleteThreads(ids: List<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
             _conversations.value.filter { it.threadId in ids }.forEach { prefs.setDraft(it.address, "") }

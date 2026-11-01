@@ -87,12 +87,12 @@ suspend fun captureBackdrop(view: View, scale: Float = 0.5f): Backdrop? =
             cont.resume(null)
             return@suspendCancellableCoroutine
         }
-        val bmp = Bitmap.createBitmap(
-            (w * scale).roundToInt().coerceAtLeast(1),
-            (h * scale).roundToInt().coerceAtLeast(1),
-            Bitmap.Config.ARGB_8888
-        )
         try {
+            val bmp = Bitmap.createBitmap(
+                (w * scale).roundToInt().coerceAtLeast(1),
+                (h * scale).roundToInt().coerceAtLeast(1),
+                Bitmap.Config.ARGB_8888
+            )
             PixelCopy.request(
                 win,
                 bmp,
@@ -202,6 +202,7 @@ class LiveBlur {
     val src = RenderNode("lbSrc")
     val blur = RenderNode("lbBlur")
     var radius = -1f
+    var broken = false
 }
 
 /**
@@ -220,10 +221,12 @@ fun Modifier.liveBlurEdge(
 ): Modifier = drawWithContent {
     val a = amount().coerceIn(0f, 1f)
     val hh = heightPx().coerceAtMost(size.height)
-    if (a <= 0.01f || hh <= 1f || size.width < 1f) {
+    if (h.broken || a <= 0.01f || hh <= 1f || size.width < 1f) {
         drawContent()
         return@drawWithContent
     }
+    var contentDrawn = false
+    try {
     val w = size.width.toInt()
     val fullH = size.height.toInt()
     val bh = hh.toInt().coerceAtLeast(1)
@@ -239,6 +242,7 @@ fun Modifier.liveBlurEdge(
         h.src.endRecording()
     }
     drawIntoCanvas { it.nativeCanvas.drawRenderNode(h.src) }
+    contentDrawn = true
 
     val oy = if (bottom) (fullH - bh).toFloat() else 0f
     h.blur.setPosition(0, 0, w, bh)
@@ -282,5 +286,9 @@ fun Modifier.liveBlurEdge(
         }
         c.restore()
         c.restore()
+    }
+    } catch (e: Throwable) {
+        h.broken = true
+        if (!contentDrawn) drawContent()
     }
 }
