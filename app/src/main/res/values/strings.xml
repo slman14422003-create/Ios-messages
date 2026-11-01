@@ -169,7 +169,7 @@
 
     <!-- Notification style -->
     <string name="notif_style">Notification Style</string>
-    <string name="notif_style_footer">The banner appears while the app is open, in its own window with its own blur (separate from the app's blur). Android does not let apps recolour the system notification shade, so outside the app only the accent colour is applied.</string>
+    <string name="notif_style_footer">The banner appears while the app is open, in its own window with its own blur (separate from the app\'s blur). Android does not let apps recolour the system notification shade, so outside the app only the accent colour is applied.</string>
     <string name="banner_in_app">In-App Banner</string>
     <string name="notif_color">Banner Color</string>
     <string name="notif_opacity">Transparency</string>
