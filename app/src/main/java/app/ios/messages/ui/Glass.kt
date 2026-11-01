@@ -61,7 +61,8 @@ import kotlin.coroutines.resume
 
 /** Snapshot of the app window taken when a menu opens; menus blur it to look like iOS materials. */
 class Backdrop(
-    val image: ImageBitmap,
+    val image: ImageBitmap?,
+    val node: RenderNode?,
     val hostLeft: Int,
     val hostTop: Int,
     val width: Int,
@@ -87,10 +88,10 @@ suspend fun captureBackdrop(view: View, scale: Float = 0.5f): Backdrop? =
             cont.resume(null)
             return@suspendCancellableCoroutine
         }
-        // Screenshot protection is on: the system hands back a black frame for secure windows, so skip
-        // the blur backdrop (menus fall back to flat glass) instead of drawing a black one.
+        // Screenshot protection is on: PixelCopy returns a black frame for secure windows, so record the
+        // window into a RenderNode instead. It never leaves the app's own window, so it stays protected.
         if (win.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE != 0) {
-            cont.resume(null)
+            cont.resume(recordBackdrop(decor, w, h))
             return@suspendCancellableCoroutine
         }
         try {
@@ -107,8 +108,8 @@ suspend fun captureBackdrop(view: View, scale: Float = 0.5f): Backdrop? =
                     if (result == PixelCopy.SUCCESS) {
                         val loc = IntArray(2)
                         decor.getLocationOnScreen(loc)
-                        cont.resume(Backdrop(bmp.asImageBitmap(), loc[0], loc[1], w, h))
-                    } else cont.resume(null)
+                        cont.resume(Backdrop(bmp.asImageBitmap(), null, loc[0], loc[1], w, h))
+                    } else cont.resume(recordBackdrop(decor, w, h))
                 },
                 Handler(Looper.getMainLooper())
             )
@@ -116,6 +117,22 @@ suspend fun captureBackdrop(view: View, scale: Float = 0.5f): Backdrop? =
             if (cont.isActive) cont.resume(null)
         }
     }
+
+private fun recordBackdrop(decor: View, w: Int, h: Int): Backdrop? = try {
+    val node = RenderNode("backdropLive")
+    node.setPosition(0, 0, w, h)
+    val rc = node.beginRecording(w, h)
+    try {
+        decor.draw(rc)
+    } finally {
+        node.endRecording()
+    }
+    val loc = IntArray(2)
+    decor.getLocationOnScreen(loc)
+    Backdrop(null, node, loc[0], loc[1], w, h)
+} catch (e: Throwable) {
+    null
+}
 
 /** Tracks where a composable sits on the physical screen (popup and dialog windows move around). */
 @Stable
@@ -161,6 +178,14 @@ fun GlassBackdrop(
     val d = LocalDensity.current
     val r = with(d) { blurDp.dp.toPx() }
     val effect = remember(r) { BlurEffect(r, r, TileMode.Clamp) }
+    remember(snap, saturation) {
+        snap.node?.setRenderEffect(
+            RenderEffect.createColorFilterEffect(
+                ColorMatrixColorFilter(android.graphics.ColorMatrix().apply { setSaturation(saturation) })
+            )
+        )
+        0
+    }
     val cf = remember(saturation) {
         ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(saturation) })
     }
@@ -174,12 +199,18 @@ fun GlassBackdrop(
             }
             .graphicsLayer { renderEffect = effect }
             .drawBehind {
-                drawImage(
-                    snap.image,
-                    dstSize = IntSize(snap.width, snap.height),
-                    colorFilter = cf,
-                    filterQuality = FilterQuality.Low
-                )
+                val img = snap.image
+                val node = snap.node
+                if (img != null) {
+                    drawImage(
+                        img,
+                        dstSize = IntSize(snap.width, snap.height),
+                        colorFilter = cf,
+                        filterQuality = FilterQuality.Low
+                    )
+                } else if (node != null) {
+                    drawIntoCanvas { it.nativeCanvas.drawRenderNode(node) }
+                }
             }
     )
 }
