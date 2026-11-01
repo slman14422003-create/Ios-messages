@@ -83,6 +83,11 @@ class Prefs(ctx: Context) {
         set(v) { sp.edit().putFloat("banner_alpha", v.coerceIn(0.3f, 1f)).apply() }
 
     /** 0 none, 1 slide, 2 pop, 3 fade, 4 bounce. */
+    /** Blur radius (dp) of the banner's own window blur. Independent from the app's glass effects. */
+    var bannerBlur: Int
+        get() = sp.getInt("banner_blur", 24).coerceIn(0, 60)
+        set(v) { sp.edit().putInt("banner_blur", v.coerceIn(0, 60)).apply() }
+
     var bannerAnim: Int
         get() = sp.getInt("banner_anim", 1).coerceIn(0, 4)
         set(v) { sp.edit().putInt("banner_anim", v).apply() }
@@ -90,6 +95,29 @@ class Prefs(ctx: Context) {
     var bannerSeconds: Int
         get() = sp.getInt("banner_seconds", 4).coerceIn(2, 10)
         set(v) { sp.edit().putInt("banner_seconds", v).apply() }
+
+    /** 0 = bundled iPhone-style tone, 1 = the phone's default notification sound. */
+    var notifTone: Int
+        get() = sp.getInt("notif_tone", 0)
+        set(v) { sp.edit().putInt("notif_tone", v).apply() }
+
+    var sentSound: Boolean
+        get() = sp.getBoolean("sent_sound", true)
+        set(v) { sp.edit().putBoolean("sent_sound", v).apply() }
+
+    /** 0 default, 1 double tap, 2 long. */
+    var vibPattern: Int
+        get() = sp.getInt("vib_pattern", 0)
+        set(v) { sp.edit().putInt("vib_pattern", v).apply() }
+
+    /** Ask the system to let message notifications through Do Not Disturb (needs the user's grant). */
+    var bypassDnd: Boolean
+        get() = sp.getBoolean("bypass_dnd", false)
+        set(v) { sp.edit().putBoolean("bypass_dnd", v).apply() }
+
+    var showSimLabel: Boolean
+        get() = sp.getBoolean("show_sim_label", true)
+        set(v) { sp.edit().putBoolean("show_sim_label", v).apply() }
 
     /** The colour actually used (ARGB int). */
     fun notifColorArgb(): Int {

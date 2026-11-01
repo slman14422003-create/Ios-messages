@@ -66,14 +66,28 @@ object Notifier {
         return nm
     }
 
-    fun channelId(prefs: Prefs, codes: Boolean): String =
+    /** Do Not Disturb override only counts once the user has actually granted policy access. */
+    private fun dndBypass(ctx: Context, prefs: Prefs): Boolean =
+        prefs.bypassDnd && ctx.getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted
+
+    private fun vibration(prefs: Prefs): LongArray = when (prefs.vibPattern) {
+        1 -> longArrayOf(0, 120, 90, 120)
+        2 -> longArrayOf(0, 600)
+        else -> longArrayOf(0, 250, 120, 250)
+    }
+
+    // Channel settings are frozen once created, so every setting that lives on the channel is part of its id.
+    fun channelId(ctx: Context, prefs: Prefs, codes: Boolean): String =
         (if (codes) "codes" else "messages") +
             "_s" + (if (prefs.notifSound) 1 else 0) +
             "v" + (if (prefs.notifVibrate) 1 else 0) +
-            "h" + (if (prefs.notifHeadsUp) 1 else 0)
+            "h" + (if (prefs.notifHeadsUp) 1 else 0) +
+            "t" + prefs.notifTone +
+            "p" + prefs.vibPattern +
+            "d" + (if (dndBypass(ctx, prefs)) 1 else 0)
 
     private fun channelFor(nm: NotificationManager, prefs: Prefs, codes: Boolean, lc: Context): String {
-        val id = channelId(prefs, codes)
+        val id = channelId(lc, prefs, codes)
         val importance = when {
             prefs.notifHeadsUp -> NotificationManager.IMPORTANCE_HIGH
             else -> NotificationManager.IMPORTANCE_DEFAULT
@@ -85,12 +99,18 @@ object Notifier {
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
-            ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), attrs)
+            ch.setSound(
+                if (prefs.notifTone == 0) Sounds.receivedUri(lc) else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                attrs
+            )
         } else {
             ch.setSound(null, null)
         }
         ch.enableVibration(prefs.notifVibrate)
+        if (prefs.notifVibrate) ch.vibrationPattern = vibration(prefs)
         ch.enableLights(true)
+        ch.lightColor = prefs.notifColorArgb()
+        if (dndBypass(lc, prefs)) ch.setBypassDnd(true)
         ch.setShowBadge(true)
         ch.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         nm.createNotificationChannel(ch)
@@ -103,7 +123,7 @@ object Notifier {
     fun channelSettingsIntent(ctx: Context): Intent =
         Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-            .putExtra(Settings.EXTRA_CHANNEL_ID, channelId(Prefs(ctx), false))
+            .putExtra(Settings.EXTRA_CHANNEL_ID, channelId(ctx, Prefs(ctx), false))
 
     fun show(ctx: Context, address: String, body: String, subId: Int = -1) {
         if (!allowed(ctx)) return
@@ -119,7 +139,7 @@ object Notifier {
         val title = repo.contactName(address) ?: address
         val id = address.hashCode()
         val code = if (prefs.notifCopyCode) Otp.extract(body) else null
-        val channel = channelId(prefs, code != null)
+        val channel = channelId(ctx, prefs, code != null)
         val previews = prefs.previews
         val shownBody = if (previews) body else lc.getString(R.string.notif_new_message)
 
@@ -127,7 +147,7 @@ object Notifier {
         if (AppState.foreground && prefs.bannerEnabled) {
             val simLabel = if (subId >= 0) runCatching {
                 val sims = Sims.list(ctx)
-                if (sims.size > 1) sims.firstOrNull { it.subId == subId }?.label else null
+                if (sims.size > 1 && prefs.showSimLabel) sims.firstOrNull { it.subId == subId }?.label else null
             }.getOrNull() else null
             if (AppState.banners.tryEmit(BannerEvent(AppState.nextId(), address, title, shownBody, simLabel))) {
                 alertInForeground(ctx, prefs)
@@ -165,7 +185,7 @@ object Notifier {
 
         if (subId >= 0) {
             val sims = runCatching { Sims.list(ctx) }.getOrDefault(emptyList())
-            if (sims.size > 1) sims.firstOrNull { it.subId == subId }?.let { b.setSubText(it.label) }
+            if (sims.size > 1 && prefs.showSimLabel) sims.firstOrNull { it.subId == subId }?.let { b.setSubText(it.label) }
         }
 
         if (code != null && previews) {
@@ -216,12 +236,10 @@ object Notifier {
 
     /** The system plays nothing while we post no notification, so honour the sound / vibration switches here. */
     private fun alertInForeground(ctx: Context, prefs: Prefs) {
-        if (prefs.notifSound) runCatching {
-            RingtoneManager.getRingtone(ctx, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()
-        }
+        Sounds.playReceived(ctx)
         if (prefs.notifVibrate) runCatching {
             ctx.getSystemService(android.os.Vibrator::class.java)
-                ?.vibrate(android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                ?.vibrate(android.os.VibrationEffect.createWaveform(vibration(prefs), -1))
         }
     }
 
@@ -244,7 +262,7 @@ object Notifier {
             ctx, SUMMARY_ID, Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val summary = Notification.Builder(ctx, channelId(prefs, false))
+        val summary = Notification.Builder(ctx, channelId(ctx, prefs, false))
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(lc.getString(R.string.messages))
             .setContentText(label)

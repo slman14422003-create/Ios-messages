@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -39,6 +38,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.ios.messages.AppState
+import app.ios.messages.BannerEvent
 import app.ios.messages.R
 import app.ios.messages.data.Prefs
 import app.ios.messages.security.Integrity
@@ -76,18 +77,17 @@ fun NotificationLookSection() {
     var color by remember { mutableLongStateOf(prefs.notifColor) }
     var alpha by remember { mutableFloatStateOf(prefs.bannerAlpha) }
     var anim by remember { mutableIntStateOf(prefs.bannerAnim) }
-    var shown by remember { mutableStateOf(false) }
+    var blur by remember { mutableFloatStateOf(prefs.bannerBlur.toFloat()) }
     var playKey by remember { mutableIntStateOf(0) }
     val argb = if (color != 0L) Color(color) else Color(prefs.notifColorArgb())
-    val look = BannerLook(argb, alpha, anim, prefs.bannerSeconds)
+    val demoTitle = stringResource(R.string.notif_preview_title)
+    val demoBody = stringResource(R.string.notif_preview_body)
 
+    // The preview is a real banner (its own window), exactly as it will look for a new message.
     LaunchedEffect(playKey) {
         if (playKey > 0) {
-            shown = false
-            delay(60)
-            shown = true
-            delay(2600)
-            shown = false
+            delay(120)
+            AppState.banners.tryEmit(BannerEvent(AppState.nextId(), "", demoTitle, demoBody, null))
         }
     }
 
@@ -130,6 +130,20 @@ fun NotificationLookSection() {
             )
         }
         Hairline(Modifier.padding(start = 16.dp))
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.notif_blur), color = p.label, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                Text(blur.toInt().toString(), color = p.secondary, fontSize = 17.sp)
+            }
+            Slider(
+                value = blur,
+                onValueChange = { blur = it },
+                onValueChangeFinished = { prefs.bannerBlur = blur.toInt(); playKey++ },
+                valueRange = 0f..60f,
+                colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = argb, inactiveTrackColor = p.received)
+            )
+        }
+        Hairline(Modifier.padding(start = 16.dp))
         val names = listOf(
             R.string.anim_none, R.string.anim_slide, R.string.anim_pop, R.string.anim_fade, R.string.anim_bounce
         )
@@ -140,18 +154,6 @@ fun NotificationLookSection() {
         }
         SettingRow(stringResource(R.string.notif_preview), last = true, onClick = { playKey++ }) {
             Text(stringResource(R.string.notif_preview_play), color = p.blue, fontSize = 17.sp)
-        }
-    }
-    // Live preview, outside the grouped card so the banner can overlap nothing else.
-    Box(Modifier.fillMaxWidth().heightIn(min = 84.dp).padding(top = 10.dp)) {
-        AnimatedVisibility(shown, enter = look.enter(), exit = look.exit()) {
-            BannerCard(
-                title = stringResource(R.string.notif_preview_title),
-                body = stringResource(R.string.notif_preview_body),
-                sub = null,
-                look = look,
-                modifier = Modifier.padding(horizontal = 12.dp)
-            )
         }
     }
 }
@@ -188,6 +190,67 @@ fun PrivacySecuritySection() {
                 stringResource(if (verdict == Integrity.Verdict.OK) R.string.integrity_ok else R.string.integrity_bad),
                 color = if (verdict == Integrity.Verdict.OK) p.secondary else Red, fontSize = 17.sp
             )
+        }
+    }
+}
+
+
+/** Tone, send sound, vibration pattern and the "get through Do Not Disturb / battery saver" switches. */
+@Composable
+fun NotificationSoundSection() {
+    val p = LocalPalette.current
+    val ctx = LocalContext.current
+    val prefs = remember { Prefs(ctx) }
+    var tone by remember { mutableIntStateOf(prefs.notifTone) }
+    var sent by remember { mutableStateOf(prefs.sentSound) }
+    var vib by remember { mutableIntStateOf(prefs.vibPattern) }
+    var dnd by remember { mutableStateOf(prefs.bypassDnd) }
+    var simLabel by remember { mutableStateOf(prefs.showSimLabel) }
+    val nm = remember { ctx.getSystemService(android.app.NotificationManager::class.java) }
+
+    Section(stringResource(R.string.sounds_title), stringResource(R.string.sounds_footer)) {
+        SettingRow(stringResource(R.string.tone_ios), onClick = { tone = 0; prefs.notifTone = 0; app.ios.messages.Sounds.playReceived(ctx) }) {
+            if (tone == 0) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
+        }
+        SettingRow(stringResource(R.string.tone_system), onClick = { tone = 1; prefs.notifTone = 1; app.ios.messages.Sounds.playReceived(ctx) }) {
+            if (tone == 1) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
+        }
+        SettingRow(stringResource(R.string.sent_sound), last = true) {
+            IosSwitch(sent) { sent = it; prefs.sentSound = it; if (it) app.ios.messages.Sounds.playSent(ctx) }
+        }
+    }
+    Section(stringResource(R.string.vib_title)) {
+        listOf(R.string.vib_default, R.string.vib_double, R.string.vib_long).forEachIndexed { i, res ->
+            SettingRow(stringResource(res), last = i == 2, onClick = { vib = i; prefs.vibPattern = i }) {
+                if (vib == i) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
+            }
+        }
+    }
+    Section(stringResource(R.string.reliability_title), stringResource(R.string.reliability_footer)) {
+        SettingRow(stringResource(R.string.bypass_dnd)) {
+            IosSwitch(dnd) {
+                dnd = it
+                prefs.bypassDnd = it
+                if (it && !nm.isNotificationPolicyAccessGranted) {
+                    runCatching {
+                        ctx.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
+            }
+        }
+        SettingRow(stringResource(R.string.battery_unrestricted), onClick = {
+            runCatching {
+                ctx.startActivity(
+                    android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }) { ChevronRight(p.tertiary) }
+        SettingRow(stringResource(R.string.show_sim_label), last = true) {
+            IosSwitch(simLabel) { simLabel = it; prefs.showSimLabel = it }
         }
     }
 }

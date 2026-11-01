@@ -202,3 +202,19 @@
 
 ### Not verified
 - Build with the GitHub Actions workflow and send the log if anything fails
+
+
+## Task: v3.0 / 3.1 - notification look, sounds, local protection, Android 16
+
+### Done
+- In-app banner (ui/InAppBanner.kt) with colour, transparency and 5 entrance animations; settings in ui/NotifLookSettings.kt
+- Sounds.kt: bundled send/receive tones (res/raw, synthesized placeholders - replace with your own files), tone choice, vibration patterns, Do Not Disturb override, battery shortcut
+- Screenshot blocking (FLAG_SECURE, default on), security/Integrity.kt (pinned signing cert, debugger/hook checks), security/SecureStore.kt (Keystore encryption for drafts + trash), no INTERNET permission, no cloud backup
+- Backup v2 (600k PBKDF2 iterations, old backups still readable); blocked numbers now also filter MMS
+- compileSdk/targetSdk 36, AGP 8.9.1, Gradle 8.11.1 (workflow updated)
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+### v3.2
+- Banner now lives in its own window with its own blur (Window.setBackgroundBlurRadius, setting "Banner Blur"), independent from the app glass/backdrop blur; preview plays the real banner

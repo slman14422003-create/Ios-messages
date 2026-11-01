@@ -453,8 +453,10 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
 
         InAppBannerHost(
             onOpen = { addr ->
-                settingsOpen = false
-                chat = ChatTarget(null, addr, vm.nameFor(addr))
+                if (addr.isNotBlank()) {
+                    settingsOpen = false
+                    chat = ChatTarget(null, addr, vm.nameFor(addr))
+                }
             },
             modifier = Modifier.align(Alignment.TopCenter)
         )

@@ -345,6 +345,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     fun send(address: String, body: String, attachment: String?, subId: Int, onThread: (Long) -> Unit) {
         if (subId >= 0) prefs.setSimFor(address, subId)
         prefs.setDraft(address, "")
+        Sounds.playSent(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 if (attachment != null) {

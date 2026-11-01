@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "app.ios.messages"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.ios.messages"
         minSdk = 31
-        targetSdk = 34
-        versionCode = 20
-        versionName = "3.0"
+        targetSdk = 36
+        versionCode = 22
+        versionName = "3.2"
         // SHA-256 of the release signing certificate. At start-up the app compares it with the
         // certificate it is actually signed with; a re-signed / re-packaged copy locks itself.
         // If you ever change release.jks, update this value (keytool -list -v -keystore release.jks).
