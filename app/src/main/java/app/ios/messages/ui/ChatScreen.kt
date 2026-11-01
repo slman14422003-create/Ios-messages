@@ -270,7 +270,7 @@ private fun ChatScreenBody(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val barH = 112.dp
+    val barH = 128.dp
     val tick = rememberTick()
     val scope = rememberCoroutineScope()
     val rdir = rtlSign()
@@ -383,58 +383,30 @@ private fun ChatScreenBody(
                         Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 8.dp),
                         onClick = onBack
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
-                    Box(Modifier.align(Alignment.BottomCenter)) {
-                        IosMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            IosMenuItem(
-                                text = { Text(stringResource(R.string.call)) },
-                                onClick = {
-                                    menu = false
-                                    runCatching {
-                                        ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(address))))
-                                    }
-                                }
-                            )
-                            IosMenuItem(
-                                text = { Text(stringResource(R.string.add_to_contacts)) },
-                                onClick = {
-                                    menu = false
-                                    runCatching {
-                                        ctx.startActivity(
-                                            Intent(ContactsContract.Intents.Insert.ACTION).apply {
-                                                type = ContactsContract.RawContacts.CONTENT_TYPE
-                                                putExtra(ContactsContract.Intents.Insert.PHONE, address)
-                                            }
-                                        )
-                                    }
-                                }
-                            )
-                            IosMenuItem(
-                                text = { Text(stringResource(R.string.copy_number)) },
-                                onClick = {
-                                    menu = false
-                                    clipboard.setText(AnnotatedString(address))
-                                }
-                            )
-                        }
-                    }
+                    if (menu) ContactSheet(name, address) { menu = false }
                     Column(
-                        Modifier.align(Alignment.TopCenter).padding(top = 6.dp).plainClickable { menu = true },
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 2.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .plainClickable { menu = true }
+                            .padding(horizontal = 18.dp, vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Avatar(name, 52.dp)
-                        Spacer(Modifier.height(5.dp))
+                        Avatar(name, 58.dp)
+                        Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 name,
                                 color = p.label,
-                                fontSize = 13.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 200.dp)
+                                modifier = Modifier.widthIn(max = 220.dp)
                             )
-                            Spacer(Modifier.width(3.dp))
-                            ChevronRight(p.secondary, width = 5, height = 9, stroke = 1.4f)
+                            Spacer(Modifier.width(4.dp))
+                            ChevronRight(p.secondary, width = 6, height = 11, stroke = 1.6f)
                         }
                     }
                     val headerSim = sims.firstOrNull { it.subId == simSel }
@@ -1038,3 +1010,85 @@ private fun lastLocationLink(ctx: android.content.Context): String? {
         .maxByOrNull { it.time } ?: return null
     return "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
 }
+
+
+@Composable
+private fun ContactSheet(name: String, address: String, onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val contactUri = remember(address) { findContactUri(ctx, address) }
+    IosAlert(
+        title = name,
+        message = if (name != address) address else null,
+        header = {
+            Avatar(name, 76.dp)
+            Spacer(Modifier.height(10.dp))
+        },
+        actions = listOf(AlertAction(stringResource(R.string.contact_done), bold = true, onClick = onDismiss)),
+        onDismiss = onDismiss
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ContactTile(stringResource(R.string.call), Modifier.weight(1f), { PhoneIcon(p.blue) }) {
+                onDismiss()
+                runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(address)))) }
+            }
+            ContactTile(
+                stringResource(if (contactUri != null) R.string.contact_view else R.string.contact_add),
+                Modifier.weight(1f),
+                { ContactIcon(p.blue) }
+            ) {
+                onDismiss()
+                runCatching {
+                    if (contactUri != null) {
+                        ctx.startActivity(Intent(Intent.ACTION_VIEW, contactUri))
+                    } else {
+                        ctx.startActivity(
+                            Intent(ContactsContract.Intents.Insert.ACTION).apply {
+                                type = ContactsContract.RawContacts.CONTENT_TYPE
+                                putExtra(ContactsContract.Intents.Insert.PHONE, address)
+                            }
+                        )
+                    }
+                }
+            }
+            ContactTile(stringResource(R.string.copy_number), Modifier.weight(1f), { CopyIcon(p.blue) }) {
+                clipboard.setText(AnnotatedString(address))
+                onDismiss()
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContactTile(label: String, modifier: Modifier, icon: @Composable () -> Unit, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Column(
+        modifier
+            .height(78.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(p.fieldFill)
+            .iosClickable(onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        icon()
+        Spacer(Modifier.height(6.dp))
+        Text(label, color = p.blue, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
+    }
+}
+
+private fun findContactUri(ctx: android.content.Context, address: String): Uri? = runCatching {
+    if (ctx.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        return@runCatching null
+    }
+    val u = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(address))
+    ctx.contentResolver.query(
+        u,
+        arrayOf(ContactsContract.PhoneLookup._ID, ContactsContract.PhoneLookup.LOOKUP_KEY),
+        null, null, null
+    )?.use { c ->
+        if (c.moveToFirst()) ContactsContract.Contacts.getLookupUri(c.getLong(0), c.getString(1)) else null
+    }
+}.getOrNull()

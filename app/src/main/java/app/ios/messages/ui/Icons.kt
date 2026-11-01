@@ -323,3 +323,40 @@ fun LocationIcon(color: Color, modifier: Modifier = Modifier) {
         drawPath(arrow, color, style = Stroke(sw, join = StrokeJoin.Round))
     }
 }
+
+
+@Composable
+fun PhoneIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val w = size.width
+        val sw = 1.8.dp.toPx()
+        val path = Path().apply {
+            moveTo(w * 0.26f, w * 0.12f)
+            cubicTo(w * 0.32f, w * 0.10f, w * 0.36f, w * 0.14f, w * 0.40f, w * 0.24f)
+            cubicTo(w * 0.43f, w * 0.31f, w * 0.38f, w * 0.34f, w * 0.34f, w * 0.38f)
+            cubicTo(w * 0.40f, w * 0.50f, w * 0.50f, w * 0.60f, w * 0.62f, w * 0.66f)
+            cubicTo(w * 0.66f, w * 0.62f, w * 0.69f, w * 0.57f, w * 0.76f, w * 0.60f)
+            cubicTo(w * 0.86f, w * 0.64f, w * 0.90f, w * 0.68f, w * 0.88f, w * 0.74f)
+            cubicTo(w * 0.84f, w * 0.86f, w * 0.74f, w * 0.90f, w * 0.62f, w * 0.86f)
+            cubicTo(w * 0.36f, w * 0.78f, w * 0.18f, w * 0.56f, w * 0.12f, w * 0.30f)
+            cubicTo(w * 0.10f, w * 0.20f, w * 0.16f, w * 0.14f, w * 0.26f, w * 0.12f)
+            close()
+        }
+        drawPath(path, color, style = Stroke(sw, join = StrokeJoin.Round))
+    }
+}
+
+@Composable
+fun CopyIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val w = size.width
+        val sw = 1.8.dp.toPx()
+        drawRoundRect(color, Offset(w * 0.30f, w * 0.30f), Size(w * 0.56f, w * 0.56f), CornerRadius(w * 0.10f), style = Stroke(sw))
+        val back = Path().apply {
+            moveTo(w * 0.20f, w * 0.66f)
+            lineTo(w * 0.20f, w * 0.20f)
+            lineTo(w * 0.66f, w * 0.20f)
+        }
+        drawPath(back, color, style = Stroke(sw, join = StrokeJoin.Round, cap = StrokeCap.Round))
+    }
+}

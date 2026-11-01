@@ -158,3 +158,14 @@
 
 ### Not verified
 - Build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: Contact card from the chat header (v2.6)
+
+### Done
+- Tapping the name/avatar in the chat header opens a glass contact card: big avatar, name, number, and three large tiles (Call, View Contact or Add Contact, Copy Number)
+- View Contact is shown when the number is saved (PhoneLookup lookup URI), Add Contact otherwise
+- Header name 16sp bold, avatar 58dp, larger rounded tap area; barH 128dp
+- IosAlert got an optional header slot; new PhoneIcon and CopyIcon
+
+### Not verified
+- Build with the GitHub Actions workflow and send the log if anything fails

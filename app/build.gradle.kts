@@ -12,8 +12,8 @@ android {
         applicationId = "app.ios.messages"
         minSdk = 31
         targetSdk = 34
-        versionCode = 14
-        versionName = "2.5"
+        versionCode = 15
+        versionName = "2.6"
     }
 
     signingConfigs {

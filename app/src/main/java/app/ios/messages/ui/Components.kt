@@ -477,6 +477,7 @@ fun IosAlert(
     message: String? = null,
     actions: List<AlertAction>,
     onDismiss: () -> Unit,
+    header: (@Composable ColumnScope.() -> Unit)? = null,
     content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     val p = LocalPalette.current
@@ -506,6 +507,7 @@ fun IosAlert(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        if (header != null) header()
                         Text(
                             title,
                             color = p.label,
