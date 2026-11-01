@@ -1095,11 +1095,11 @@ private fun ContactSheet(name: String, address: String, onDismiss: () -> Unit) {
                     .height(44.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(p.fieldFill)
-                    .iosClickable {
+                    .iosClickable(onClick = {
                         val ok = if (blocked) app.ios.messages.data.Blocking.unblock(ctx, address)
                         else app.ios.messages.data.Blocking.block(ctx, address)
                         if (ok) blocked = !blocked
-                    },
+                    }),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
