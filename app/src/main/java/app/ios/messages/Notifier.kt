@@ -50,8 +50,13 @@ object Notifier {
             }
             prefs.notifChannelVersion = 3
         }
-        channelFor(nm, prefs, false, lc)
-        channelFor(nm, prefs, true, lc)
+        val keep = setOf(channelFor(nm, prefs, false, lc), channelFor(nm, prefs, true, lc), CH_FAILED)
+        // Every sound/vibrate/pop-up combination used to leave its own channel behind forever.
+        nm.notificationChannels.forEach { ch ->
+            if (ch.id !in keep && (ch.id.startsWith("messages_s") || ch.id.startsWith("codes_s"))) {
+                runCatching { nm.deleteNotificationChannel(ch.id) }
+            }
+        }
         if (nm.getNotificationChannel(CH_FAILED) == null) {
             nm.createNotificationChannel(NotificationChannel(CH_FAILED, lc.getString(R.string.ch_failed), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = lc.getString(R.string.ch_failed_desc)
@@ -107,6 +112,8 @@ object Notifier {
         val repo = SmsRepository(ctx)
         val tid = runCatching { repo.threadIdFor(address) }.getOrNull()
         if (tid != null && tid in prefs.muted) return
+        // The conversation is on screen right now: the message is already visible (and gets marked read).
+        if (AppState.foreground && AppState.openKey == prefs.key(address)) return
         val nm = ensureChannels(ctx)
         val lc = Lang.wrap(ctx)
         val title = repo.contactName(address) ?: address
@@ -115,6 +122,18 @@ object Notifier {
         val channel = channelId(prefs, code != null)
         val previews = prefs.previews
         val shownBody = if (previews) body else lc.getString(R.string.notif_new_message)
+
+        // App is open elsewhere: use our own, fully customisable banner instead of the system shade.
+        if (AppState.foreground && prefs.bannerEnabled) {
+            val simLabel = if (subId >= 0) runCatching {
+                val sims = Sims.list(ctx)
+                if (sims.size > 1) sims.firstOrNull { it.subId == subId }?.label else null
+            }.getOrNull() else null
+            if (AppState.banners.tryEmit(BannerEvent(AppState.nextId(), address, title, shownBody, simLabel))) {
+                alertInForeground(ctx, prefs)
+                return
+            }
+        }
 
         val lines = synchronized(history) {
             val l = history.getOrPut(address) { ArrayList() }
@@ -136,6 +155,7 @@ object Notifier {
             .setContentIntent(open(ctx, address))
             .setDeleteIntent(dismissed(ctx, address))
             .setCategory(Notification.CATEGORY_MESSAGE)
+            .setColor(prefs.notifColorArgb())
             .setGroup(if (prefs.notifGroup) GROUP else null)
             .setAutoCancel(true)
             .setOnlyAlertOnce(false)
@@ -194,6 +214,17 @@ object Notifier {
         if (prefs.notifGroup) postSummary(ctx, nm, prefs)
     }
 
+    /** The system plays nothing while we post no notification, so honour the sound / vibration switches here. */
+    private fun alertInForeground(ctx: Context, prefs: Prefs) {
+        if (prefs.notifSound) runCatching {
+            RingtoneManager.getRingtone(ctx, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()
+        }
+        if (prefs.notifVibrate) runCatching {
+            ctx.getSystemService(android.os.Vibrator::class.java)
+                ?.vibrate(android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+        }
+    }
+
     private fun dismissed(ctx: Context, address: String): PendingIntent =
         PendingIntent.getBroadcast(
             ctx, address.hashCode() xor 0x3333,
@@ -221,6 +252,7 @@ object Notifier {
             .setGroup(GROUP)
             .setGroupSummary(true)
             .setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN)
+            .setColor(prefs.notifColorArgb())
             .setContentIntent(open)
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)

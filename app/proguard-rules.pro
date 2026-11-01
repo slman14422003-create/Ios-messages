@@ -6,3 +6,11 @@
 -keep class app.ios.messages.MmsReceiver { *; }
 -keep class app.ios.messages.HeadlessSmsSendService { *; }
 -dontwarn kotlin.**
+
+# Release builds print nothing but errors to logcat.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+    public static int w(...);
+}

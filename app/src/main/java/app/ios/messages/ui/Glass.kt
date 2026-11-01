@@ -87,6 +87,12 @@ suspend fun captureBackdrop(view: View, scale: Float = 0.5f): Backdrop? =
             cont.resume(null)
             return@suspendCancellableCoroutine
         }
+        // Screenshot protection is on: the system hands back a black frame for secure windows, so skip
+        // the blur backdrop (menus fall back to flat glass) instead of drawing a black one.
+        if (win.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE != 0) {
+            cont.resume(null)
+            return@suspendCancellableCoroutine
+        }
         try {
             val bmp = Bitmap.createBitmap(
                 (w * scale).roundToInt().coerceAtLeast(1),

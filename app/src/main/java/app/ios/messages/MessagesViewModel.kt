@@ -281,6 +281,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
             val tid = threadId ?: address?.let { runCatching { repo.threadIdFor(it) }.getOrNull() }
             if (tid != openThread) _messages.value = emptyList()
             openThread = tid
+            AppState.openKey = address?.let { prefs.key(it) }
             address?.let { Notifier.cancel(getApplication(), it) }
             refresh()
         }
@@ -288,6 +289,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeChat() {
         openThread = null
+        AppState.openKey = null
     }
 
     fun clearMessages() {

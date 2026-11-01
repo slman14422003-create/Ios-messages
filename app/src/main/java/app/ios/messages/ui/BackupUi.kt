@@ -18,7 +18,7 @@ import app.ios.messages.R
 fun BackupPasswordDialog(confirm: Boolean, onDismiss: () -> Unit, onOk: (String) -> Unit) {
     var pw by remember { mutableStateOf("") }
     var pw2 by remember { mutableStateOf("") }
-    val ok = pw.length >= 4 && (!confirm || pw == pw2)
+    val ok = pw.length >= 8 && (!confirm || pw == pw2)
     IosAlert(
         title = stringResource(if (confirm) R.string.backup_set_password else R.string.backup_enter_password),
         actions = listOf(

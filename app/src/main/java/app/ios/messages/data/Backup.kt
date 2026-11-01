@@ -23,12 +23,16 @@ object Backup {
     class BadPassword : Exception()
     class BadFile : Exception()
 
-    private val MAGIC = "IMSGBK1".toByteArray()
-    private const val ITER = 150_000
+    private val MAGIC_V1 = "IMSGBK1".toByteArray()
+    private val MAGIC = "IMSGBK2".toByteArray()
+    private const val ITER_V1 = 150_000
+    private const val ITER = 600_000
+    private const val MAX_BYTES = 256 * 1024 * 1024
 
-    private fun key(pw: CharArray, salt: ByteArray): SecretKeySpec {
+    private fun key(pw: CharArray, salt: ByteArray, iter: Int = ITER): SecretKeySpec {
         val f = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val raw = f.generateSecret(PBEKeySpec(pw, salt, ITER, 256)).encoded
+        val spec = PBEKeySpec(pw, salt, iter, 256)
+        val raw = try { f.generateSecret(spec).encoded } finally { spec.clearPassword() }
         return SecretKeySpec(raw, "AES")
     }
 
@@ -68,14 +72,28 @@ object Backup {
     }
 
     fun restore(ctx: Context, input: InputStream, password: CharArray): Int {
-        val all = input.readBytes()
-        if (all.size < MAGIC.size + 28 || !all.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)) throw BadFile()
+        val buf = ByteArrayOutputStream()
+        val chunk = ByteArray(64 * 1024)
+        while (true) {
+            val n = input.read(chunk)
+            if (n < 0) break
+            buf.write(chunk, 0, n)
+            if (buf.size() > MAX_BYTES) throw BadFile()
+        }
+        val all = buf.toByteArray()
+        if (all.size < MAGIC.size + 28) throw BadFile()
+        val head = all.copyOfRange(0, MAGIC.size)
+        val iter = when {
+            head.contentEquals(MAGIC) -> ITER
+            head.contentEquals(MAGIC_V1) -> ITER_V1   // backups made by older versions
+            else -> throw BadFile()
+        }
         var o = MAGIC.size
         val salt = all.copyOfRange(o, o + 16); o += 16
         val iv = all.copyOfRange(o, o + 12); o += 12
         val plain = try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(password, salt), GCMParameterSpec(128, iv))
+            cipher.init(Cipher.DECRYPT_MODE, key(password, salt, iter), GCMParameterSpec(128, iv))
             cipher.doFinal(all, o, all.size - o)
         } catch (e: AEADBadTagException) {
             throw BadPassword()

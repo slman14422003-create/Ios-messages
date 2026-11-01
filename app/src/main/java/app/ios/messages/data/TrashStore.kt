@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import app.ios.messages.security.SecureStore
 import java.io.File
 
 data class TrashItem(
@@ -24,10 +25,10 @@ object TrashStore {
     private fun file(ctx: Context) = File(ctx.filesDir, "trash.json")
 
     private fun readAll(ctx: Context): JSONArray =
-        runCatching { JSONArray(file(ctx).readText()) }.getOrDefault(JSONArray())
+        runCatching { JSONArray(SecureStore.open(file(ctx).readText())) }.getOrDefault(JSONArray())
 
     private fun writeAll(ctx: Context, arr: JSONArray) {
-        runCatching { file(ctx).writeText(arr.toString()) }
+        runCatching { file(ctx).writeText(SecureStore.seal(arr.toString())) }
     }
 
     fun daysLeft(item: TrashItem): Int =

@@ -74,6 +74,9 @@ import app.ios.messages.ui.SetupScreen
 import app.ios.messages.ui.plainClickable
 import app.ios.messages.ui.rtlSign
 import app.ios.messages.data.Prefs
+import app.ios.messages.security.Integrity
+import app.ios.messages.security.applyScreenSecure
+import app.ios.messages.ui.InAppBannerHost
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -86,8 +89,22 @@ class MainActivity : ComponentActivity() {
     private var appearance by mutableStateOf(0)
     private var textScale by mutableStateOf(1f)
 
+    /** True when the integrity check failed: nothing from the message store is touched. */
+    private var locked = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Block screenshots / screen recording / app-switcher preview, and ignore taps while another
+        // app draws over us (tapjacking).
+        applyScreenSecure(Prefs(this).screenSecure)
+        window.decorView.filterTouchesWhenObscured = true
+        val verdict = Integrity.verdict(this)
+        if (verdict != Integrity.Verdict.OK) {
+            locked = true
+            enableEdgeToEdge()
+            setContent { LockedScreen(onExit = { finishAffinity() }) }
+            return
+        }
         appearance = Prefs(this).appearance
         textScale = Prefs(this).textScale
         enableEdgeToEdge()
@@ -149,8 +166,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (locked) return
+        // A debugger / hook attached while the app was in the background.
+        if (Integrity.verdict(this) != Integrity.Verdict.OK) { recreate(); return }
+        AppState.foreground = true
         vm.recheckRole()
         vm.refresh()
+    }
+
+    override fun onPause() {
+        AppState.foreground = false
+        super.onPause()
     }
 
     private fun addressFrom(i: Intent?): String? {
@@ -425,6 +451,14 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             )
         }
 
+        InAppBannerHost(
+            onOpen = { addr ->
+                settingsOpen = false
+                chat = ChatTarget(null, addr, vm.nameFor(addr))
+            },
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+
         EdgeSwipeBack(
             progress = progress,
             enabled = chat != null,
@@ -522,6 +556,24 @@ private fun CrashScreen(trace: String, onContinue: () -> Unit) {
             }
             Button(onClick = { clipboard.setText(AnnotatedString(trace)) }) { Text("Copy") }
             Button(onClick = onContinue) { Text("Try opening the app") }
+        }
+    }
+}
+
+
+@Composable
+private fun LockedScreen(onExit: () -> Unit) {
+    MaterialTheme {
+        Column(
+            Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().padding(28.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(androidx.compose.ui.res.stringResource(R.string.locked_title), fontSize = 22.sp, color = Color.White)
+            androidx.compose.foundation.layout.Spacer(Modifier.padding(8.dp))
+            Text(androidx.compose.ui.res.stringResource(R.string.locked_body), fontSize = 15.sp, color = Color(0xFFAEAEB2))
+            androidx.compose.foundation.layout.Spacer(Modifier.padding(14.dp))
+            Button(onClick = onExit) { Text(androidx.compose.ui.res.stringResource(R.string.locked_exit)) }
         }
     }
 }

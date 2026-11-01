@@ -1,6 +1,7 @@
 package app.ios.messages.data
 
 import android.content.Context
+import app.ios.messages.security.SecureStore
 
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -65,6 +66,44 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("notif_channel_version", 0)
         set(v) { sp.edit().putInt("notif_channel_version", v).apply() }
 
+    // ---- notification look (in-app banner + system accent) -----------------------------------
+
+    /** Show our own banner while the app is open (the system shade cannot be restyled on Android 12+). */
+    var bannerEnabled: Boolean
+        get() = sp.getBoolean("banner_enabled", true)
+        set(v) { sp.edit().putBoolean("banner_enabled", v).apply() }
+
+    /** ARGB colour of the banner / notification accent. 0 = follow the sent-bubble colour. */
+    var notifColor: Long
+        get() = sp.getLong("notif_color", 0L)
+        set(v) { sp.edit().putLong("notif_color", v).apply() }
+
+    var bannerAlpha: Float
+        get() = sp.getFloat("banner_alpha", 0.88f).coerceIn(0.3f, 1f)
+        set(v) { sp.edit().putFloat("banner_alpha", v.coerceIn(0.3f, 1f)).apply() }
+
+    /** 0 none, 1 slide, 2 pop, 3 fade, 4 bounce. */
+    var bannerAnim: Int
+        get() = sp.getInt("banner_anim", 1).coerceIn(0, 4)
+        set(v) { sp.edit().putInt("banner_anim", v).apply() }
+
+    var bannerSeconds: Int
+        get() = sp.getInt("banner_seconds", 4).coerceIn(2, 10)
+        set(v) { sp.edit().putInt("banner_seconds", v).apply() }
+
+    /** The colour actually used (ARGB int). */
+    fun notifColorArgb(): Int {
+        val c = notifColor
+        return if (c != 0L) c.toInt() else if (bubbleBlue) 0xFF007AFF.toInt() else 0xFF34C759.toInt()
+    }
+
+    // ---- privacy ------------------------------------------------------------------------------
+
+    /** FLAG_SECURE: blocks screenshots, screen recording and the app-switcher thumbnail. On by default. */
+    var screenSecure: Boolean
+        get() = sp.getBoolean("screen_secure", true)
+        set(v) { sp.edit().putBoolean("screen_secure", v).apply() }
+
     var muted: Set<Long>
         get() = (sp.getStringSet("muted", emptySet()) ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet()
         set(v) { sp.edit().putStringSet("muted", v.map { it.toString() }.toSet()).apply() }
@@ -113,7 +152,7 @@ class Prefs(ctx: Context) {
 
     // ---- drafts ------------------------------------------------------------------------------
 
-    fun draft(address: String): String = sp.getString("draft_" + key(address), "") ?: ""
+    fun draft(address: String): String = SecureStore.open(sp.getString("draft_" + key(address), "") ?: "")
 
     fun setDraft(address: String, text: String) {
         val k = key(address)
@@ -121,8 +160,8 @@ class Prefs(ctx: Context) {
         if (text.isBlank()) {
             e.remove("draft_$k").remove("draft_addr_$k").remove("draft_time_$k")
         } else {
-            if (sp.getString("draft_$k", null) != text) e.putLong("draft_time_$k", System.currentTimeMillis())
-            e.putString("draft_$k", text).putString("draft_addr_$k", address)
+            if (draft(address) != text) e.putLong("draft_time_$k", System.currentTimeMillis())
+            e.putString("draft_$k", SecureStore.seal(text)).putString("draft_addr_$k", SecureStore.seal(address))
         }
         e.apply()
     }
@@ -132,8 +171,9 @@ class Prefs(ctx: Context) {
             .filter { it.startsWith("draft_") && !it.startsWith("draft_addr_") && !it.startsWith("draft_time_") }
             .mapNotNull { k ->
                 val id = k.removePrefix("draft_")
-                val a = sp.getString("draft_addr_$id", null) ?: return@mapNotNull null
-                val t = sp.getString(k, "") ?: ""
+                val a = SecureStore.open(sp.getString("draft_addr_$id", null) ?: return@mapNotNull null)
+                val t = SecureStore.open(sp.getString(k, "") ?: "")
+                if (a.isBlank()) return@mapNotNull null
                 if (t.isBlank()) null else Triple(a, t, sp.getLong("draft_time_$id", 0L))
             }
 }

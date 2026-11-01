@@ -12,20 +12,26 @@ android {
         applicationId = "app.ios.messages"
         minSdk = 31
         targetSdk = 34
-        versionCode = 19
-        versionName = "2.9"
+        versionCode = 20
+        versionName = "3.0"
+        // SHA-256 of the release signing certificate. At start-up the app compares it with the
+        // certificate it is actually signed with; a re-signed / re-packaged copy locks itself.
+        // If you ever change release.jks, update this value (keytool -list -v -keystore release.jks).
+        buildConfigField("String", "CERT_SHA256", "\"C16DDD8ADAFDEC27F547A8126F22183F2E1D1E3E76439DCABCB2A71B96EF938A\"")
     }
 
     signingConfigs {
         create("release") {
             storeFile = file("release.jks")
-            storePassword = "iosmessages"
+            // Prefer environment variables so the passwords need not live in a public repository.
+            storePassword = System.getenv("IMSG_STORE_PASSWORD") ?: "iosmessages"
             keyAlias = "ios"
-            keyPassword = "iosmessages"
+            keyPassword = System.getenv("IMSG_KEY_PASSWORD") ?: "iosmessages"
         }
     }
     buildTypes {
         release {
+            isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -44,7 +50,10 @@ android {
         checkReleaseBuilds = false
         abortOnError = false
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }

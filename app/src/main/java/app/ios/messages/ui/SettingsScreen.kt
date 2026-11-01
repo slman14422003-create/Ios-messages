@@ -265,6 +265,9 @@ fun SettingsScreen(
                 }
             }
 
+            NotificationLookSection()
+            PrivacySecuritySection()
+
             Section(stringResource(R.string.backup_title), stringResource(R.string.backup_desc)) {
                 SettingRow(stringResource(R.string.backup_export), onClick = onBackup) { ChevronRight(p.tertiary) }
                 SettingRow(stringResource(R.string.backup_restore), last = true, onClick = onRestore) { ChevronRight(p.tertiary) }
@@ -337,7 +340,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun Section(
+internal fun Section(
     title: String,
     footer: String? = null,
     content: @Composable ColumnScope.() -> Unit
@@ -368,7 +371,7 @@ private fun Section(
 }
 
 @Composable
-private fun SettingRow(
+internal fun SettingRow(
     title: String,
     last: Boolean = false,
     onClick: (() -> Unit)? = null,
@@ -392,7 +395,7 @@ private fun SettingRow(
 }
 
 @Composable
-private fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
     val track by animateColorAsState(if (checked) SentBubble else p.received, Motion.fade(250), label = "track")
     val x by animateDpAsState(

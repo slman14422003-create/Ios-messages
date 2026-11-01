@@ -428,6 +428,7 @@ object Mms {
             if (!ok) return null
             val r = parseRetrieve(f.readBytes()) ?: return null
             val addr = (r.from ?: from).ifBlank { return null }
+            if (Blocking.isBlocked(ctx, addr)) return null
             storeIncoming(ctx, addr, r, subId)
             val text = r.parts.firstOrNull { it.type.startsWith("text/plain") }
                 ?.let { String(it.data, Charsets.UTF_8).trim() }
