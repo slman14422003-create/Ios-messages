@@ -19,4 +19,14 @@ object Blocking {
 
     fun unblock(ctx: Context, number: String): Boolean =
         runCatching { BlockedNumberContract.unblock(ctx, number) > 0 }.getOrDefault(false)
+
+    fun list(ctx: Context): List<String> = runCatching {
+        val out = ArrayList<String>()
+        ctx.contentResolver.query(
+            BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+            arrayOf(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER),
+            null, null, null
+        )?.use { c -> while (c.moveToNext()) c.getString(0)?.let { out += it } }
+        out
+    }.getOrDefault(emptyList())
 }

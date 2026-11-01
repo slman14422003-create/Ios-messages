@@ -214,6 +214,9 @@ private fun ChatScreenBody(
     val density = LocalDensity.current
     val address = target.address.orEmpty()
     var menu by remember { mutableStateOf(false) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchPos by remember { mutableStateOf(0) }
     var simMenu by remember { mutableStateOf(false) }
     var emojiOpen by remember { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = emojiOpen) { emojiOpen = false }
@@ -263,6 +266,14 @@ private fun ChatScreenBody(
     val rev = remember(messages) { buildItems(itemsCtx, messages).asReversed() }
     val listState = rememberLazyListState()
     val liveTop = remember { LiveBlur() }
+    val matches = remember(rev, searchQuery, searchOpen) {
+        if (!searchOpen || searchQuery.isBlank()) emptyList()
+        else rev.mapIndexedNotNull { i, it -> if (it is ChatItem.Bubble && it.m.body.contains(searchQuery, true)) i else null }
+    }
+    val curMatch = matches.getOrNull(searchPos.coerceIn(0, maxOf(0, matches.size - 1)))
+    LaunchedEffect(matches, searchPos) {
+        curMatch?.let { runCatching { listState.animateScrollToItem(it) } }
+    }
     val liveBottom = remember { LiveBlur() }
     var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     val blurPx = with(LocalDensity.current) { 32.dp.toPx() }
@@ -321,6 +332,9 @@ private fun ChatScreenBody(
                     is ChatItem.Time -> TimeHeader(item)
                     is ChatItem.Bubble -> BubbleRow(
                         item,
+                        if (!searchOpen || searchQuery.isBlank()) 0
+                        else if (rev.indexOf(item) == curMatch) 2
+                        else if (item.m.body.contains(searchQuery, true)) 1 else 0,
                         isDefault,
                         onDeleteMessage,
                         { reveal.value },
@@ -383,7 +397,7 @@ private fun ChatScreenBody(
                         Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 8.dp),
                         onClick = onBack
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
-                    if (menu) ContactSheet(name, address) { menu = false }
+                    if (menu) ContactSheet(name, address, { searchOpen = true; searchQuery = ""; searchPos = 0 }) { menu = false }
                     Column(
                         Modifier
                             .align(Alignment.TopCenter)
@@ -511,7 +525,16 @@ private fun ChatScreenBody(
         }
 
         Box(Modifier.align(Alignment.BottomCenter)) {
-            InputBar(
+            if (searchOpen) ChatSearchBar(
+                query = searchQuery,
+                onQuery = { searchQuery = it; searchPos = 0 },
+                count = matches.size,
+                pos = searchPos.coerceIn(0, maxOf(0, matches.size - 1)),
+                onPrev = { if (matches.isNotEmpty()) searchPos = (searchPos + 1) % matches.size },
+                onNext = { if (matches.isNotEmpty()) searchPos = (searchPos - 1 + matches.size) % matches.size },
+                onClose = { searchOpen = false; searchQuery = "" },
+                onHeight = { inputH = it }
+            ) else InputBar(
                 text = text,
                 attach = attach,
                 sims = sims,
@@ -667,6 +690,7 @@ private fun BubbleContent(
 @Composable
 private fun BubbleRow(
     b: ChatItem.Bubble,
+    hl: Int,
     isDefault: Boolean,
     onDelete: (Long) -> Unit,
     reveal: () -> Float,
@@ -709,6 +733,13 @@ private fun BubbleRow(
                         transformOrigin = TransformOrigin(if (mine == (bdir > 0f)) 1f else 0f, 1f)
                     }
                     .onGloballyPositioned { boundsRef[0] = it.boundsInWindow() }
+                    .then(
+                        if (hl > 0) Modifier.border(
+                            if (hl == 2) 2.5.dp else 1.5.dp,
+                            if (hl == 2) Color(0xFFFFCC00) else Color(0x80FFCC00),
+                            RoundedCornerShape(20.dp)
+                        ) else Modifier
+                    )
             ) {
                 BubbleContent(
                     b = b,
@@ -1041,7 +1072,7 @@ private fun lastLocationLink(ctx: android.content.Context): String? {
 
 
 @Composable
-private fun ContactSheet(name: String, address: String, onDismiss: () -> Unit) {
+private fun ContactSheet(name: String, address: String, onSearch: () -> Unit, onDismiss: () -> Unit) {
     val p = LocalPalette.current
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -1086,6 +1117,21 @@ private fun ContactSheet(name: String, address: String, onDismiss: () -> Unit) {
                 clipboard.setText(AnnotatedString(address))
                 onDismiss()
             }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(p.fieldFill)
+                .iosClickable(onClick = { onDismiss(); onSearch() })
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SearchIcon(p.blue, Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(stringResource(R.string.search_in_chat), color = p.blue, fontSize = 16.sp)
         }
         if (canBlock) {
             Spacer(Modifier.height(8.dp))
@@ -1144,3 +1190,66 @@ private fun findContactUri(ctx: android.content.Context, address: String): Uri? 
         if (c.moveToFirst()) ContactsContract.Contacts.getLookupUri(c.getLong(0), c.getString(1)) else null
     }
 }.getOrNull()
+
+
+@Composable
+private fun ChatSearchBar(
+    query: String,
+    onQuery: (String) -> Unit,
+    count: Int,
+    pos: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+    onHeight: (Int) -> Unit
+) {
+    val p = LocalPalette.current
+    val fr = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .onSizeChanged { onHeight(it.height) }
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            Modifier
+                .weight(1f)
+                .height(40.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(p.fieldFill)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SearchIcon(p.secondary, Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQuery,
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 16.sp, color = p.label),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(p.blue),
+                    modifier = Modifier.fillMaxWidth().focusRequester(fr)
+                )
+                if (query.isEmpty()) Text(stringResource(R.string.search), color = p.secondary, fontSize = 16.sp)
+            }
+            if (query.isNotBlank()) {
+                Text(
+                    if (count == 0) "0" else stringResource(R.string.search_count, pos + 1, count),
+                    color = p.secondary,
+                    fontSize = 13.sp
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        GlassCircle(36.dp, Modifier, onClick = onPrev) { ChevronLeft(p.blue, Modifier.graphicsLayer { rotationZ = 90f }) }
+        Spacer(Modifier.width(6.dp))
+        GlassCircle(36.dp, Modifier, onClick = onNext) { ChevronLeft(p.blue, Modifier.graphicsLayer { rotationZ = -90f }) }
+        Spacer(Modifier.width(10.dp))
+        Text(stringResource(R.string.cancel), color = p.blue, fontSize = 17.sp, modifier = Modifier.plainClickable(onClose))
+    }
+}

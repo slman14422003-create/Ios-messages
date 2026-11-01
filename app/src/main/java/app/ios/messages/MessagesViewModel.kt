@@ -32,6 +32,30 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     private val _pinned = MutableStateFlow(prefs.pinned)
     val pinned: StateFlow<Set<Long>> = _pinned
 
+    private val _trash = MutableStateFlow<List<app.ios.messages.data.TrashItem>>(emptyList())
+    val trash: StateFlow<List<app.ios.messages.data.TrashItem>> = _trash
+
+    fun loadTrash() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _trash.value = try { app.ios.messages.data.TrashStore.list(getApplication<Application>()) } catch (e: Exception) { emptyList() }
+        }
+    }
+
+    fun restoreTrash(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try { app.ios.messages.data.TrashStore.restore(getApplication<Application>(), id) } catch (_: Exception) { }
+            loadTrash()
+            refresh()
+        }
+    }
+
+    fun purgeTrash(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try { app.ios.messages.data.TrashStore.purge(getApplication<Application>(), id) } catch (_: Exception) { }
+            loadTrash()
+        }
+    }
+
     private val _muted = MutableStateFlow(prefs.muted)
     val muted: StateFlow<Set<Long>> = _muted
 
@@ -85,6 +109,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         app.contentResolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
         refresh()
         loadContacts()
+        loadTrash()
+        applyRetention()
     }
 
     fun loadContacts() {
@@ -155,6 +181,16 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun applyRetention() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val d = Prefs(getApplication<Application>()).keepDays
+            if (d > 0) {
+                repo.deleteOlderThan(d)
+                refresh()
+            }
+        }
+    }
+
     fun markUnread(ids: List<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
             ids.forEach { repo.markUnread(it) }
@@ -165,7 +201,14 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteThreads(ids: List<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
             _conversations.value.filter { it.threadId in ids }.forEach { prefs.setDraft(it.address, "") }
+            if (repo.isDefault()) {
+                ids.filter { it >= 0 }.forEach { id ->
+                    val nm = _conversations.value.firstOrNull { it.threadId == id }?.name.orEmpty()
+                    app.ios.messages.data.TrashStore.put(getApplication<Application>(), id, nm)
+                }
+            }
             ids.filter { it >= 0 }.forEach { repo.deleteThread(it) }
+            loadTrash()
             refresh()
         }
     }

@@ -89,6 +89,9 @@ fun ConversationsScreen(
     onDelete: (List<Long>) -> Unit,
     onMarkRead: (List<Long>) -> Unit,
     onMarkUnread: (List<Long>) -> Unit = {},
+    trash: List<app.ios.messages.data.TrashItem> = emptyList(),
+    onRestoreTrash: (String) -> Unit = {},
+    onPurgeTrash: (String) -> Unit = {},
     onTogglePin: (Long) -> Unit,
     onToggleMute: (Long) -> Unit,
     onMakeDefault: () -> Unit,
@@ -104,13 +107,14 @@ fun ConversationsScreen(
     var editMenu by remember { mutableStateOf(false) }
     var filterMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf<Long?>(null) }
+    var trashSel by remember { mutableStateOf<app.ios.messages.data.TrashItem?>(null) }
     val thud = rememberThud()
     val tick = rememberTick()
     var confirmDelete by remember { mutableStateOf<List<Long>?>(null) }
     val rowBounds = remember { HashMap<Long, Rect>() }
 
     val filtered = remember(conversations, filterIdx, simFilter, query) {
-        conversations.filter { c ->
+        if (filterIdx == 4) emptyList() else conversations.filter { c ->
             val pass = when (filterIdx) {
                 1 -> c.unread > 0
                 2 -> !c.known
@@ -130,6 +134,7 @@ fun ConversationsScreen(
         1 -> stringResource(R.string.unread_messages)
         2 -> stringResource(R.string.unknown_senders)
         3 -> sims.firstOrNull { it.subId == simFilter }?.label ?: stringResource(R.string.messages)
+        4 -> stringResource(R.string.recently_deleted)
         else -> stringResource(R.string.messages)
     }
 
@@ -279,7 +284,24 @@ fun ConversationsScreen(
                 }
             }
 
-            if (filtered.isEmpty() && hasPermission) {
+            if (filterIdx == 4) {
+                if (trash.isEmpty()) {
+                    item(key = "trashEmpty") {
+                        Text(
+                            stringResource(R.string.no_recently_deleted),
+                            color = p.secondary,
+                            fontSize = 20.sp,
+                            modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                items(trash, key = { "t" + it.id }, contentType = { "trash" }) { t ->
+                    TrashRow(t) { trashSel = t }
+                }
+            }
+
+            if (filterIdx != 4 && filtered.isEmpty() && hasPermission) {
                 item(key = "empty") {
                     Text(
                         if (query.isBlank()) stringResource(R.string.no_messages) else stringResource(R.string.no_results),
@@ -290,6 +312,19 @@ fun ConversationsScreen(
                     )
                 }
             }
+        }
+
+        trashSel?.let { t ->
+            IosAlert(
+                title = t.name,
+                message = stringResource(R.string.trash_days_left, app.ios.messages.data.TrashStore.daysLeft(t)),
+                actions = listOf(
+                    AlertAction(stringResource(R.string.recover), bold = true, onClick = { trashSel = null; onRestoreTrash(t.id) }),
+                    AlertAction(stringResource(R.string.delete_permanently), destructive = true, onClick = { trashSel = null; onPurgeTrash(t.id) }),
+                    AlertAction(stringResource(R.string.cancel), onClick = { trashSel = null })
+                ),
+                onDismiss = { trashSel = null }
+            )
         }
 
         val menuConv = rowMenu?.let { id -> conversations.firstOrNull { it.threadId == id } }
@@ -431,6 +466,11 @@ fun ConversationsScreen(
                                         onClick = { simFilter = sm.subId; filterIdx = 3; filterMenu = false }
                                     ) { Text(sm.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                 }
+                                IosMenuRow(
+                                    checked = filterIdx == 4,
+                                    icon = { TrashIcon(p.label, Modifier.size(22.dp)) },
+                                    onClick = { filterIdx = 4; filterMenu = false }
+                                ) { Text(stringResource(R.string.recently_deleted)) }
                                 IosMenuDivider()
                                 IosMenuRow(
                                     icon = { GearIcon(p.label, Modifier.size(22.dp)) },
@@ -732,3 +772,38 @@ private fun ConversationRow(
 
 private val PinOrange = Color(0xFFFF9F0A)
 
+
+
+@Composable
+private fun TrashRow(t: app.ios.messages.data.TrashItem, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Box(Modifier.fillMaxWidth().iosClickable(onClick)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 26.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Avatar(t.name, 50.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        t.name,
+                        color = p.label,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        stringResource(R.string.trash_days_short, app.ios.messages.data.TrashStore.daysLeft(t)),
+                        color = p.secondary,
+                        fontSize = 15.sp
+                    )
+                }
+                Text(t.snippet, color = p.secondary, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Hairline(Modifier.align(Alignment.BottomStart).padding(start = 88.dp))
+    }
+}

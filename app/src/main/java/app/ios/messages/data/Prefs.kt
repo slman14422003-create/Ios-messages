@@ -21,6 +21,14 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("appearance", 0)
         set(v) { sp.edit().putInt("appearance", v).apply() }
 
+    var textScale: Float
+        get() = sp.getFloat("textScale", 1f)
+        set(v) { sp.edit().putFloat("textScale", v).apply() }
+
+    var keepDays: Int
+        get() = sp.getInt("keepDays", 0)
+        set(v) { sp.edit().putInt("keepDays", v).apply() }
+
     var language: String
         get() = sp.getString("language", "system") ?: "system"
         set(v) { sp.edit().putString("language", v).apply() }

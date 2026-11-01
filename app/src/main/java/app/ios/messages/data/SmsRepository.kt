@@ -340,6 +340,20 @@ class SmsRepository(private val ctx: Context) {
         }
     }
 
+    /** "Keep Messages": removes anything older than [days] days. Only runs as the default SMS app. */
+    fun deleteOlderThan(days: Int) {
+        if (days <= 0 || !isDefault()) return
+        val cutoff = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
+        try {
+            cr.delete(smsUri, "date < ?", arrayOf(cutoff.toString()))
+        } catch (_: Exception) {
+        }
+        try {
+            cr.delete(Uri.parse("content://mms"), "date < ?", arrayOf((cutoff / 1000).toString()))
+        } catch (_: Exception) {
+        }
+    }
+
     fun deleteThread(threadId: Long) {
         if (!isDefault()) return
         try {

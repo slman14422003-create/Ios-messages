@@ -89,11 +89,17 @@ fun SettingsScreen(
     onLanguage: (String) -> Unit = {},
     appearance: Int = 0,
     onAppearance: (Int) -> Unit = {},
+    textScale: Float = 1f,
+    onTextScale: (Float) -> Unit = {},
+    keepDays: Int = 0,
+    onKeepDays: (Int) -> Unit = {},
     onBackup: () -> Unit = {},
     onRestore: () -> Unit = {}
 ) {
     val p = LocalPalette.current
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    var pendingKeep by remember { mutableStateOf<Int?>(null) }
+    var blockedList by remember { mutableStateOf(app.ios.messages.data.Blocking.list(ctx)) }
     var editing by remember { mutableStateOf<SimInfo?>(null) }
     editing?.let { sim ->
         SimEditDialog(sim, onDismiss = { editing = null }, onSave = { name, color ->
@@ -176,6 +182,49 @@ fun SettingsScreen(
                 }
             }
 
+            Section(stringResource(R.string.text_size), stringResource(R.string.text_size_desc)) {
+                listOf(
+                    0.85f to stringResource(R.string.size_small),
+                    1f to stringResource(R.string.size_default),
+                    1.15f to stringResource(R.string.size_large),
+                    1.3f to stringResource(R.string.size_larger),
+                    1.5f to stringResource(R.string.size_largest)
+                ).forEachIndexed { i, (v, label) ->
+                    SettingRow(label, last = i == 4, onClick = { onTextScale(v) }) {
+                        if (kotlin.math.abs(textScale - v) < 0.01f) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
+                    }
+                }
+            }
+
+            Section(stringResource(R.string.keep_messages), stringResource(R.string.keep_messages_desc)) {
+                listOf(
+                    0 to stringResource(R.string.keep_forever),
+                    365 to stringResource(R.string.keep_year),
+                    30 to stringResource(R.string.keep_30)
+                ).forEachIndexed { i, (v, label) ->
+                    SettingRow(label, last = i == 2, onClick = {
+                        if (v != keepDays) {
+                            if (v == 0) onKeepDays(0) else pendingKeep = v
+                        }
+                    }) {
+                        if (keepDays == v) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
+                    }
+                }
+            }
+
+            if (blockedList.isNotEmpty()) {
+                Section(stringResource(R.string.blocked_contacts), stringResource(R.string.blocked_desc)) {
+                    blockedList.forEachIndexed { i, num ->
+                        SettingRow(num, last = i == blockedList.lastIndex, onClick = {
+                            app.ios.messages.data.Blocking.unblock(ctx, num)
+                            blockedList = app.ios.messages.data.Blocking.list(ctx)
+                        }) {
+                            Text(stringResource(R.string.unblock), color = p.blue, fontSize = 17.sp)
+                        }
+                    }
+                }
+            }
+
             Section(stringResource(R.string.language), stringResource(R.string.language_desc)) {
                 listOf(
                     "system" to stringResource(R.string.lang_system),
@@ -246,6 +295,14 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+        pendingKeep?.let { d ->
+            IosConfirm(
+                title = stringResource(R.string.keep_confirm, if (d == 30) stringResource(R.string.keep_30) else stringResource(R.string.keep_year)),
+                confirmLabel = stringResource(R.string.delete),
+                onConfirm = { pendingKeep = null; onKeepDays(d) },
+                onDismiss = { pendingKeep = null }
+            )
         }
         Column(
             Modifier

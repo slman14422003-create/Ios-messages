@@ -360,3 +360,25 @@ fun CopyIcon(color: Color, modifier: Modifier = Modifier) {
         drawPath(back, color, style = Stroke(sw, join = StrokeJoin.Round, cap = StrokeCap.Round))
     }
 }
+
+
+@Composable
+fun TrashIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val w = size.width
+        val sw = 1.8.dp.toPx()
+        drawLine(color, Offset(w * 0.14f, w * 0.26f), Offset(w * 0.86f, w * 0.26f), sw, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.38f, w * 0.26f), Offset(w * 0.40f, w * 0.14f), sw, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.62f, w * 0.26f), Offset(w * 0.60f, w * 0.14f), sw, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.40f, w * 0.14f), Offset(w * 0.60f, w * 0.14f), sw, StrokeCap.Round)
+        val body = Path().apply {
+            moveTo(w * 0.22f, w * 0.26f)
+            lineTo(w * 0.27f, w * 0.84f)
+            lineTo(w * 0.73f, w * 0.84f)
+            lineTo(w * 0.78f, w * 0.26f)
+        }
+        drawPath(body, color, style = Stroke(sw, join = StrokeJoin.Round, cap = StrokeCap.Round))
+        drawLine(color, Offset(w * 0.42f, w * 0.40f), Offset(w * 0.43f, w * 0.70f), sw, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.58f, w * 0.40f), Offset(w * 0.57f, w * 0.70f), sw, StrokeCap.Round)
+    }
+}

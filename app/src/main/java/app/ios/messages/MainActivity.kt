@@ -84,10 +84,12 @@ class MainActivity : ComponentActivity() {
     private val vm: MessagesViewModel by viewModels()
     private var pendingAddress by mutableStateOf<String?>(null)
     private var appearance by mutableStateOf(0)
+    private var textScale by mutableStateOf(1f)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         appearance = Prefs(this).appearance
+        textScale = Prefs(this).textScale
         enableEdgeToEdge()
         val crashFile = java.io.File(filesDir, "crash.txt")
         if (crashFile.exists()) {
@@ -116,13 +118,22 @@ class MainActivity : ComponentActivity() {
                 )
                 onDispose { }
             }
+            val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                    baseDensity.density, baseDensity.fontScale * textScale
+                )
+            ) {
             IMessageTheme(sent = if (blue) IosBlue else SentBubble, appearance = appearance) {
                 App(
                     vm, pendingAddress,
                     onLanguage = { Prefs(this).language = it; recreate() },
                     appearance = appearance,
-                    onAppearance = { appearance = it; Prefs(this).appearance = it }
+                    onAppearance = { appearance = it; Prefs(this).appearance = it },
+                    textScale = textScale,
+                    onTextScale = { textScale = it; Prefs(this).textScale = it }
                 ) { pendingAddress = null }
+            }
             }
         }
     }
@@ -159,7 +170,7 @@ private fun requiredPermissions(): Array<String> = buildList {
 }.toTypedArray()
 
 @Composable
-private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (String) -> Unit, appearance: Int, onAppearance: (Int) -> Unit, onConsumed: () -> Unit) {
+private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (String) -> Unit, appearance: Int, onAppearance: (Int) -> Unit, textScale: Float, onTextScale: (Float) -> Unit, onConsumed: () -> Unit) {
     val ctx = LocalContext.current
     val language = remember { Prefs(ctx).language }
     val dir = rtlSign()
@@ -182,6 +193,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     val hasPermission by vm.hasPermission.collectAsStateWithLifecycle()
     val pinned by vm.pinned.collectAsStateWithLifecycle()
     val muted by vm.muted.collectAsStateWithLifecycle()
+    val trash by vm.trash.collectAsStateWithLifecycle()
     val contacts by vm.contacts.collectAsStateWithLifecycle()
     val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
     val notifications by vm.notifications.collectAsStateWithLifecycle()
@@ -197,6 +209,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     val defaultSub by vm.defaultSub.collectAsStateWithLifecycle()
     val setupDismissed by vm.setupDismissed.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var keepDays by remember { mutableStateOf(Prefs(ctx).keepDays) }
 
     var chat by rememberSaveable { mutableStateOf<ChatTarget?>(null) }
     var lastChat by remember { mutableStateOf<ChatTarget?>(null) }
@@ -269,6 +282,9 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 onDelete = { vm.deleteThreads(it) },
                 onMarkRead = { vm.markRead(it) },
                 onMarkUnread = { vm.markUnread(it) },
+                trash = trash,
+                onRestoreTrash = { vm.restoreTrash(it) },
+                onPurgeTrash = { vm.purgeTrash(it) },
                 onTogglePin = { vm.togglePin(it) },
                 onToggleMute = { vm.toggleMute(it) },
                 onMakeDefault = {
@@ -393,6 +409,10 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                     onLanguage = onLanguage,
                     appearance = appearance,
                     onAppearance = onAppearance,
+                    textScale = textScale,
+                    onTextScale = onTextScale,
+                    keepDays = keepDays,
+                    onKeepDays = { keepDays = it; Prefs(ctx).keepDays = it; vm.applyRetention() },
                     onBackup = { backupDialog = true },
                     onRestore = { openLauncher.launch(arrayOf("*/*")) }
                 )

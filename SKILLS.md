@@ -181,3 +181,24 @@
 
 ### Not verified
 - Build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: Recently Deleted (v2.8)
+
+### Done
+- data/TrashStore.kt: before a conversation is deleted its SMS are copied to filesDir/trash.json and kept 30 days; list / put / restore / purge; expired items are dropped automatically
+- MessagesViewModel: trash flow, loadTrash, restoreTrash, purgeTrash; deleteThreads saves to the trash first (default SMS app only)
+- Conversations: "Recently Deleted" entry in the filter menu (trash icon); list shows deleted conversations with days left; tap opens Recover / Delete Permanently / Cancel
+- MMS-only threads cannot be recovered (no copy is stored for them)
+
+### Not verified
+- Build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: More iOS features (v2.9)
+
+### Done
+- Search in Conversation: tile row in the contact card opens a bottom search bar; matches get a yellow outline (current match stronger), up/down arrows jump between matches, "n of m" counter
+- Settings: Text Size (5 steps, scales fontScale for the whole app), Keep Messages (Forever / 1 Year / 30 Days with confirmation; applied at launch and when changed, default SMS app only), Blocked Contacts list with Unblock (shown only when something is blocked)
+- Prefs: textScale, keepDays; SmsRepository.deleteOlderThan; Blocking.list
+
+### Not verified
+- Build with the GitHub Actions workflow and send the log if anything fails
