@@ -238,13 +238,35 @@ private fun ChatScreenBody(
         if (uri != null) attach = uri.toString()
     }
     val itemsCtx = androidx.compose.ui.platform.LocalContext.current
+    val kbc = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var camUri by rememberSaveable { mutableStateOf<String?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) attach = camUri
+    }
+    val pickContact = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
+        if (uri != null) {
+            val line = readContactLine(itemsCtx, uri)
+            if (line != null) text = if (text.isBlank()) line else text + "\n" + line
+        }
+    }
+    fun addLocation() {
+        val link = lastLocationLink(itemsCtx)
+        if (link == null) {
+            android.widget.Toast.makeText(itemsCtx, itemsCtx.getString(R.string.location_unavailable), android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            text = if (text.isBlank()) link else text + "\n" + link
+        }
+    }
+    val locPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        if (r.values.any { it }) addLocation()
+    }
     val rev = remember(messages) { buildItems(itemsCtx, messages).asReversed() }
     val listState = rememberLazyListState()
     val liveTop = remember { LiveBlur() }
     val liveBottom = remember { LiveBlur() }
     var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    val blurPx = with(LocalDensity.current) { 22.dp.toPx() }
-    val fadeTail = with(LocalDensity.current) { 16.dp.toPx() }
+    val blurPx = with(LocalDensity.current) { 32.dp.toPx() }
+    val fadeTail = with(LocalDensity.current) { 24.dp.toPx() }
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -276,8 +298,8 @@ private fun ChatScreenBody(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = listAlpha }
-                .liveBlurEdge(liveBottom, true, { inputH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.45f), blurPx, fade = true)
-                .liveBlurEdge(liveTop, false, { headerH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.45f), blurPx, fade = true)
+                .liveBlurEdge(liveBottom, true, { inputH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.62f), blurPx, fade = true)
+                .liveBlurEdge(liveTop, false, { headerH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.62f), blurPx, fade = true)
                 .pointerInput(Unit) {
                     val back = spring<Float>(dampingRatio = 0.8f, stiffness = 380f)
                     detectHorizontalDragGestures(
@@ -513,7 +535,27 @@ private fun ChatScreenBody(
                 onEmojiToggle = { emojiOpen = it },
                 onEmoji = { text += it },
                 onBackspace = { text = dropLastGrapheme(text) },
-                onPlus = { picker.launch("image/*") },
+                onCamera = {
+                    runCatching {
+                        val dir = java.io.File(itemsCtx.cacheDir, "mms").apply { mkdirs() }
+                        val f = java.io.File(dir, "cam_${System.currentTimeMillis()}.jpg")
+                        val u = androidx.core.content.FileProvider.getUriForFile(itemsCtx, "${itemsCtx.packageName}.fileprovider", f)
+                        camUri = u.toString()
+                        camera.launch(u)
+                    }
+                },
+                onPhotos = { picker.launch("image/*") },
+                onStickers = { kbc?.hide(); emojiOpen = true },
+                onContact = { runCatching { pickContact.launch(null) } },
+                onLocation = {
+                    val granted = itemsCtx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (granted) addLocation()
+                    else locPerm.launch(arrayOf(
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                        android.Manifest.permission.ACCESS_FINE_LOCATION
+                    ))
+                },
                 onClearAttach = { attach = null },
                 onSend = {
                     if (address.isNotEmpty() && (text.isNotBlank() || attach != null)) {
@@ -785,7 +827,11 @@ private fun InputBar(
     onEmojiToggle: (Boolean) -> Unit,
     onEmoji: (String) -> Unit,
     onBackspace: () -> Unit,
-    onPlus: () -> Unit,
+    onCamera: () -> Unit,
+    onPhotos: () -> Unit,
+    onStickers: () -> Unit,
+    onContact: () -> Unit,
+    onLocation: () -> Unit,
     onClearAttach: () -> Unit,
     onSend: () -> Unit
 ) {
@@ -796,6 +842,12 @@ private fun InputBar(
     val fr = remember { FocusRequester() }
     val pill = RoundedCornerShape(22.dp)
     val canSend = text.isNotBlank() || attach != null
+    var plusOpen by remember { mutableStateOf(false) }
+    val plusRot by androidx.compose.animation.core.animateFloatAsState(
+        if (plusOpen) 45f else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 380f),
+        label = "plusRot"
+    )
     Column(
         Modifier
             .fillMaxWidth()
@@ -850,9 +902,28 @@ private fun InputBar(
                     .shadow(8.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.28f), spotColor = Color.Black.copy(alpha = 0.28f))
                     .clip(CircleShape)
                     .background(p.pressed)
-                    .plainClickable(onPlus),
+                    .plainClickable { plusOpen = !plusOpen },
                 contentAlignment = Alignment.Center
-            ) { PlusIcon(p.secondary) }
+            ) {
+                PlusIcon(p.secondary, Modifier.graphicsLayer { rotationZ = plusRot })
+                IosMenu(expanded = plusOpen, onDismissRequest = { plusOpen = false }, originX = 0.1f) {
+                    IosMenuRow(checkColumn = false, icon = { CameraIcon(p.label) }, onClick = { plusOpen = false; onCamera() }) {
+                        Text(stringResource(R.string.attach_camera))
+                    }
+                    IosMenuRow(checkColumn = false, icon = { PhotoIcon(p.label) }, onClick = { plusOpen = false; onPhotos() }) {
+                        Text(stringResource(R.string.attach_photos))
+                    }
+                    IosMenuRow(checkColumn = false, icon = { EmojiIcon(p.label) }, onClick = { plusOpen = false; onStickers() }) {
+                        Text(stringResource(R.string.attach_stickers))
+                    }
+                    IosMenuRow(checkColumn = false, icon = { ContactIcon(p.label) }, onClick = { plusOpen = false; onContact() }) {
+                        Text(stringResource(R.string.attach_contact))
+                    }
+                    IosMenuRow(checkColumn = false, icon = { LocationIcon(p.label) }, onClick = { plusOpen = false; onLocation() }) {
+                        Text(stringResource(R.string.attach_location))
+                    }
+                }
+            }
             Spacer(Modifier.width(10.dp))
             Box(
                 Modifier
@@ -940,4 +1011,30 @@ private fun InputBar(
             Box(Modifier.background(p.bg)) { EmojiPanel(onPick = onEmoji, onBackspace = onBackspace) }
         }
     }
+}
+
+
+private fun readContactLine(ctx: android.content.Context, uri: android.net.Uri): String? {
+    val id = uri.lastPathSegment ?: return null
+    return runCatching {
+        ctx.contentResolver.query(
+            android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            arrayOf(
+                android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER
+            ),
+            "${android.provider.ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+            arrayOf(id),
+            null
+        )?.use { c -> if (c.moveToFirst()) "${c.getString(0)}: ${c.getString(1)}" else null }
+    }.getOrNull()
+}
+
+@android.annotation.SuppressLint("MissingPermission")
+private fun lastLocationLink(ctx: android.content.Context): String? {
+    val lm = ctx.getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+    val loc = lm.getProviders(true)
+        .mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
+        .maxByOrNull { it.time } ?: return null
+    return "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
 }

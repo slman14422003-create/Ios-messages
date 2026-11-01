@@ -1,5 +1,7 @@
 package app.ios.messages.ui
 
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -242,5 +244,82 @@ fun BubbleIcon(color: Color, modifier: Modifier = Modifier, dot: Boolean = false
         }
         drawPath(path, color, style = Stroke(sw, cap = StrokeCap.Round, join = StrokeJoin.Round))
         if (dot) drawCircle(color, radius = w * 0.11f, center = Offset(w * 0.84f, h * 0.16f))
+    }
+}
+
+
+@Composable
+fun CameraIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val sw = 1.8.dp.toPx()
+        val w = size.width
+        val body = Path().apply {
+            moveTo(w * 0.10f, w * 0.30f)
+            lineTo(w * 0.30f, w * 0.30f)
+            lineTo(w * 0.38f, w * 0.18f)
+            lineTo(w * 0.62f, w * 0.18f)
+            lineTo(w * 0.70f, w * 0.30f)
+            lineTo(w * 0.90f, w * 0.30f)
+            lineTo(w * 0.90f, w * 0.80f)
+            lineTo(w * 0.10f, w * 0.80f)
+            close()
+        }
+        drawPath(body, color, style = Stroke(sw, join = StrokeJoin.Round))
+        drawCircle(color, radius = w * 0.17f, center = Offset(w * 0.5f, w * 0.55f), style = Stroke(sw))
+    }
+}
+
+@Composable
+fun PhotoIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val sw = 1.8.dp.toPx()
+        val w = size.width
+        drawRoundRect(
+            color,
+            topLeft = Offset(w * 0.10f, w * 0.14f),
+            size = Size(w * 0.80f, w * 0.72f),
+            cornerRadius = CornerRadius(w * 0.12f),
+            style = Stroke(sw)
+        )
+        drawCircle(color, radius = w * 0.07f, center = Offset(w * 0.34f, w * 0.34f), style = Stroke(sw))
+        val hills = Path().apply {
+            moveTo(w * 0.10f, w * 0.72f)
+            lineTo(w * 0.38f, w * 0.50f)
+            lineTo(w * 0.58f, w * 0.66f)
+            lineTo(w * 0.70f, w * 0.56f)
+            lineTo(w * 0.90f, w * 0.72f)
+        }
+        drawPath(hills, color, style = Stroke(sw, join = StrokeJoin.Round, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun ContactIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val sw = 1.8.dp.toPx()
+        val w = size.width
+        drawCircle(color, radius = w * 0.40f, center = center, style = Stroke(sw))
+        drawCircle(color, radius = w * 0.11f, center = Offset(w * 0.5f, w * 0.42f), style = Stroke(sw))
+        val sh = Path().apply {
+            moveTo(w * 0.27f, w * 0.74f)
+            cubicTo(w * 0.32f, w * 0.58f, w * 0.68f, w * 0.58f, w * 0.73f, w * 0.74f)
+        }
+        drawPath(sh, color, style = Stroke(sw, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun LocationIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val sw = 1.8.dp.toPx()
+        val w = size.width
+        val arrow = Path().apply {
+            moveTo(w * 0.86f, w * 0.14f)
+            lineTo(w * 0.14f, w * 0.44f)
+            lineTo(w * 0.50f, w * 0.50f)
+            lineTo(w * 0.56f, w * 0.86f)
+            close()
+        }
+        drawPath(arrow, color, style = Stroke(sw, join = StrokeJoin.Round))
     }
 }

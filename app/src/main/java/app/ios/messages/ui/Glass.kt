@@ -271,11 +271,11 @@ fun Modifier.liveBlurEdge(
         drawRect(tint, size = Size(size.width, hh))
         if (fade) {
             drawRect(
-                brush = Brush.verticalGradient(
-                    if (bottom) listOf(Color.Transparent, Color.Black) else listOf(Color.Black, Color.Transparent),
-                    startY = 0f,
-                    endY = hh
-                ),
+                brush = if (bottom) {
+                    Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black, 1f to Color.Black, startY = 0f, endY = hh)
+                } else {
+                    Brush.verticalGradient(0f to Color.Black, 0.7f to Color.Black, 1f to Color.Transparent, startY = 0f, endY = hh)
+                },
                 size = Size(size.width, hh),
                 blendMode = BlendMode.DstIn
             )

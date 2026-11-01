@@ -644,6 +644,7 @@ fun rtlSign(): Float = if (androidx.compose.ui.platform.LocalLayoutDirection.cur
 @Composable
 fun IosMenuRow(
     checked: Boolean = false,
+    checkColumn: Boolean = true,
     icon: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     label: @Composable () -> Unit
@@ -653,8 +654,10 @@ fun IosMenuRow(
         Modifier.fillMaxWidth().menuClickable(onClick).heightIn(min = 46.dp).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterStart) {
-            if (checked) CheckMark(p.label, Modifier.size(15.dp))
+        if (checkColumn) {
+            Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterStart) {
+                if (checked) CheckMark(p.label, Modifier.size(15.dp))
+            }
         }
         if (icon != null) {
             Box(Modifier.width(34.dp), contentAlignment = Alignment.CenterStart) { icon() }

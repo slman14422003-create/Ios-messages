@@ -146,3 +146,15 @@
 
 ### Not verified
 - No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+## Task: Plus menu + stronger chat blur (v2.5)
+
+### Done
+- Chat "+" button opens a glass menu (Camera, Photos, Emoji, Contact, Location); plus icon rotates 45 degrees with a spring while the menu is open
+- Camera uses TakePicture + FileProvider (cache/mms); Contact inserts "name: number"; Location inserts a maps link (last known location, permission requested on demand)
+- Chat header/input blur stronger: radius 32dp, tint 0.62, mask stays opaque for most of the bar and only fades at the edge
+- New icons in Icons.kt: CameraIcon, PhotoIcon, ContactIcon, LocationIcon; IosMenuRow(checkColumn = false)
+- Manifest: ACCESS_COARSE_LOCATION / ACCESS_FINE_LOCATION
+
+### Not verified
+- Build with the GitHub Actions workflow and send the log if anything fails
