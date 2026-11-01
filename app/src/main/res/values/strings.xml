@@ -169,7 +169,7 @@
 
     <!-- Notification style -->
     <string name="notif_style">Notification Style</string>
-    <string name="notif_style_footer">The banner appears while the app is open. Android does not let apps recolour the system notification shade, so outside the app only the accent colour is applied.</string>
+    <string name="notif_style_footer">The banner appears while the app is open, in its own window with its own blur (separate from the app's blur). Android does not let apps recolour the system notification shade, so outside the app only the accent colour is applied.</string>
     <string name="banner_in_app">In-App Banner</string>
     <string name="notif_color">Banner Color</string>
     <string name="notif_opacity">Transparency</string>
@@ -195,4 +195,21 @@
     <string name="locked_title">App locked</string>
     <string name="locked_body">This copy of Messages was modified, re-signed or is being inspected, so it stopped to protect your messages. Install the original version.</string>
     <string name="locked_exit">Close</string>
+
+    <!-- Sounds & reliability -->
+    <string name="sounds_title">Sounds</string>
+    <string name="sounds_footer">The iPhone-style tones are bundled in the app (res/raw/msg_received.wav and msg_sent.wav). Replace those two files to use your own.</string>
+    <string name="tone_ios">iPhone-style Tone</string>
+    <string name="tone_system">Phone Default</string>
+    <string name="sent_sound">Sent Sound</string>
+    <string name="vib_title">Vibration Pattern</string>
+    <string name="vib_default">Default</string>
+    <string name="vib_double">Double Tap</string>
+    <string name="vib_long">Long</string>
+    <string name="reliability_title">Always Deliver</string>
+    <string name="reliability_footer">Messages arrive even when the app is closed. Android only lets notifications through Do Not Disturb after you allow it on the screen that opens; set the app to Unrestricted so battery saving never delays them.</string>
+    <string name="bypass_dnd">Override Do Not Disturb</string>
+    <string name="battery_unrestricted">Battery: Unrestricted</string>
+    <string name="show_sim_label">Show SIM Name</string>
+    <string name="notif_blur">Banner Blur</string>
 </resources>

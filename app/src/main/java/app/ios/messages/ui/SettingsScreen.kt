@@ -266,6 +266,7 @@ fun SettingsScreen(
             }
 
             NotificationLookSection()
+            NotificationSoundSection()
             PrivacySecuritySection()
 
             Section(stringResource(R.string.backup_title), stringResource(R.string.backup_desc)) {

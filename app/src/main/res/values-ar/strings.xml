@@ -169,7 +169,7 @@
 
     <!-- شكل الإشعارات -->
     <string name="notif_style">شكل الإشعارات</string>
-    <string name="notif_style_footer">يظهر البانر أثناء فتح التطبيق. أندرويد لا يسمح للتطبيقات بتغيير لون شريط الإشعارات الخاص بالنظام، لذلك خارج التطبيق يُطبَّق لون التمييز فقط.</string>
+    <string name="notif_style_footer">يظهر البانر أثناء فتح التطبيق في نافذة مستقلة ببلور خاص به (منفصل عن بلور التطبيق). أندرويد لا يسمح للتطبيقات بتغيير لون شريط الإشعارات الخاص بالنظام، لذلك خارج التطبيق يُطبَّق لون التمييز فقط.</string>
     <string name="banner_in_app">بانر داخل التطبيق</string>
     <string name="notif_color">لون البانر</string>
     <string name="notif_opacity">الشفافية</string>
@@ -195,4 +195,21 @@
     <string name="locked_title">التطبيق مقفل</string>
     <string name="locked_body">هذه النسخة من الرسائل تم تعديلها أو إعادة توقيعها أو يجري فحصها، لذلك توقفت لحماية رسائلك. ثبّت النسخة الأصلية.</string>
     <string name="locked_exit">إغلاق</string>
+
+    <!-- الأصوات والموثوقية -->
+    <string name="sounds_title">الأصوات</string>
+    <string name="sounds_footer">نغمات بأسلوب الآيفون موجودة داخل التطبيق (res/raw/msg_received.wav و msg_sent.wav). استبدل الملفين بملفاتك لاستخدام أصواتك.</string>
+    <string name="tone_ios">نغمة بأسلوب الآيفون</string>
+    <string name="tone_system">افتراضي الهاتف</string>
+    <string name="sent_sound">صوت الإرسال</string>
+    <string name="vib_title">نمط الاهتزاز</string>
+    <string name="vib_default">افتراضي</string>
+    <string name="vib_double">نقرتان</string>
+    <string name="vib_long">طويل</string>
+    <string name="reliability_title">وصول دائم</string>
+    <string name="reliability_footer">الرسائل تصل حتى لو كان التطبيق مغلقاً. أندرويد لا يسمح بتجاوز عدم الإزعاج إلا بعد موافقتك في الشاشة التي تُفتح؛ اجعل التطبيق «غير مقيّد» في البطارية كي لا يتأخر وصول الإشعارات.</string>
+    <string name="bypass_dnd">تجاوز عدم الإزعاج</string>
+    <string name="battery_unrestricted">البطارية: بدون قيود</string>
+    <string name="show_sim_label">إظهار اسم الشريحة</string>
+    <string name="notif_blur">بلور البانر</string>
 </resources>
