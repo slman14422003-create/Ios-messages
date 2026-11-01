@@ -139,4 +139,7 @@
     <string name="contact_view">عرض جهة الاتصال</string>
     <string name="contact_add">إضافة جهة اتصال</string>
     <string name="contact_done">تم</string>
+    <string name="mark_as_unread">تحديد كغير مقروء</string>
+    <string name="block_caller">حظر هذا المتصل</string>
+    <string name="unblock_caller">إلغاء حظر هذا المتصل</string>
 </resources>
