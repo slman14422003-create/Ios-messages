@@ -130,4 +130,10 @@
     <string name="appearance_auto">تلقائي</string>
     <string name="appearance_light">نهاري</string>
     <string name="appearance_dark">ليلي</string>
+    <string name="attach_camera">الكاميرا</string>
+    <string name="attach_photos">الصور</string>
+    <string name="attach_stickers">الإيموجي</string>
+    <string name="attach_contact">جهة اتصال</string>
+    <string name="attach_location">الموقع</string>
+    <string name="location_unavailable">الموقع غير متوفر</string>
 </resources>

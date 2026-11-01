@@ -130,4 +130,10 @@
     <string name="appearance_auto">Automatic</string>
     <string name="appearance_light">Light</string>
     <string name="appearance_dark">Dark</string>
+    <string name="attach_camera">Camera</string>
+    <string name="attach_photos">Photos</string>
+    <string name="attach_stickers">Emoji</string>
+    <string name="attach_contact">Contact</string>
+    <string name="attach_location">Location</string>
+    <string name="location_unavailable">Location unavailable</string>
 </resources>
