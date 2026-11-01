@@ -166,4 +166,33 @@
     <string name="unblock">إلغاء الحظر</string>
     <string name="search_in_chat">بحث في المحادثة</string>
     <string name="search_count">%1$d من %2$d</string>
+
+    <!-- شكل الإشعارات -->
+    <string name="notif_style">شكل الإشعارات</string>
+    <string name="notif_style_footer">يظهر البانر أثناء فتح التطبيق. أندرويد لا يسمح للتطبيقات بتغيير لون شريط الإشعارات الخاص بالنظام، لذلك خارج التطبيق يُطبَّق لون التمييز فقط.</string>
+    <string name="banner_in_app">بانر داخل التطبيق</string>
+    <string name="notif_color">لون البانر</string>
+    <string name="notif_opacity">الشفافية</string>
+    <string name="anim_none">بدون حركة</string>
+    <string name="anim_slide">انزلاق من الأعلى</string>
+    <string name="anim_pop">ظهور منبثق</string>
+    <string name="anim_fade">تلاشي</string>
+    <string name="anim_bounce">ارتداد</string>
+    <string name="notif_preview">معاينة</string>
+    <string name="notif_preview_play">تشغيل</string>
+    <string name="notif_preview_title">الرسائل</string>
+    <string name="notif_preview_body">هكذا ستظهر الرسالة الجديدة.</string>
+    <!-- الخصوصية والأمان -->
+    <string name="privacy_security">الخصوصية والأمان</string>
+    <string name="privacy_footer">كل شيء يبقى على هذا الهاتف. منع لقطة الشاشة يخفي التطبيق أيضاً في شاشة التطبيقات الأخيرة ويُعطّل خلفية التمويه خلف القوائم.</string>
+    <string name="block_screenshots">منع لقطة الشاشة</string>
+    <string name="network_access">الوصول للإنترنت</string>
+    <string name="network_allowed">مسموح</string>
+    <string name="network_none">لا يوجد</string>
+    <string name="app_integrity">سلامة التطبيق</string>
+    <string name="integrity_ok">موثّق</string>
+    <string name="integrity_bad">فشل</string>
+    <string name="locked_title">التطبيق مقفل</string>
+    <string name="locked_body">هذه النسخة من الرسائل تم تعديلها أو إعادة توقيعها أو يجري فحصها، لذلك توقفت لحماية رسائلك. ثبّت النسخة الأصلية.</string>
+    <string name="locked_exit">إغلاق</string>
 </resources>

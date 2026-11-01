@@ -166,4 +166,33 @@
     <string name="unblock">Unblock</string>
     <string name="search_in_chat">Search in Conversation</string>
     <string name="search_count">%1$d of %2$d</string>
+
+    <!-- Notification style -->
+    <string name="notif_style">Notification Style</string>
+    <string name="notif_style_footer">The banner appears while the app is open. Android does not let apps recolour the system notification shade, so outside the app only the accent colour is applied.</string>
+    <string name="banner_in_app">In-App Banner</string>
+    <string name="notif_color">Banner Color</string>
+    <string name="notif_opacity">Transparency</string>
+    <string name="anim_none">No Animation</string>
+    <string name="anim_slide">Slide Down</string>
+    <string name="anim_pop">Pop</string>
+    <string name="anim_fade">Fade</string>
+    <string name="anim_bounce">Bounce</string>
+    <string name="notif_preview">Preview</string>
+    <string name="notif_preview_play">Play</string>
+    <string name="notif_preview_title">Messages</string>
+    <string name="notif_preview_body">This is how a new message will look.</string>
+    <!-- Privacy & security -->
+    <string name="privacy_security">Privacy &amp; Security</string>
+    <string name="privacy_footer">Everything stays on this phone. Screenshot blocking also hides the app in the recent-apps screen, and turns off the blurred backdrop behind menus.</string>
+    <string name="block_screenshots">Block Screenshots</string>
+    <string name="network_access">Internet Access</string>
+    <string name="network_allowed">Allowed</string>
+    <string name="network_none">None</string>
+    <string name="app_integrity">App Integrity</string>
+    <string name="integrity_ok">Verified</string>
+    <string name="integrity_bad">Failed</string>
+    <string name="locked_title">App locked</string>
+    <string name="locked_body">This copy of Messages was modified, re-signed or is being inspected, so it stopped to protect your messages. Install the original version.</string>
+    <string name="locked_exit">Close</string>
 </resources>
