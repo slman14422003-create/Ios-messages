@@ -136,4 +136,7 @@
     <string name="attach_contact">جهة اتصال</string>
     <string name="attach_location">الموقع</string>
     <string name="location_unavailable">الموقع غير متوفر</string>
+    <string name="contact_view">عرض جهة الاتصال</string>
+    <string name="contact_add">إضافة جهة اتصال</string>
+    <string name="contact_done">تم</string>
 </resources>
