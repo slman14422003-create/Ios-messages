@@ -16,5 +16,6 @@ class MessagesApp : Application() {
             }
             old?.uncaughtException(t, e)
         }
+        Thread { Sounds.warmUp(this) }.start()
     }
 }

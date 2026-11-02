@@ -47,7 +47,19 @@ object Integrity {
         return ok
     }
 
+    @Volatile private var hookCheckedAt = 0L
+    @Volatile private var hookResult = false
+
     private fun hooked(): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (hookCheckedAt != 0L && now - hookCheckedAt < 60_000L) return hookResult
+        val r = scanHooks()
+        hookResult = r
+        hookCheckedAt = now
+        return r
+    }
+
+    private fun scanHooks(): Boolean {
         if (runCatching { Class.forName("de.robv.android.xposed.XposedBridge") }.isSuccess) return true
         return runCatching {
             File("/proc/self/maps").useLines { lines ->

@@ -218,3 +218,20 @@
 
 ### v3.2
 - Banner now lives in its own window with its own blur (Window.setBackgroundBlurRadius, setting "Banner Blur"), independent from the app glass/backdrop blur; preview plays the real banner
+
+## Task: performance, smoothness, threading, security pass (v3.3)
+
+### Done
+- Threading: SmsReceiver / MmsReceiver now work inside goAsync() on a worker thread (provider insert no longer blocks the main thread); Integrity re-check on resume runs on Dispatchers.Default and the /proc/self/maps scan is throttled to once a minute; chat items (date headers, grouping) are built on Dispatchers.Default; Sounds uses a preloaded SoundPool instead of MediaPlayer.create() on every send.
+- Data: SmsRepository.withSubIds no longer scans the whole SMS table on every refresh (per-thread cache keyed by newest-message date); contact-name cache no longer holds its lock during provider queries; openChat loads that conversation's messages first, then refreshes the list.
+- Keystore: SecureStore caches the SecretKey (KeyStore.getInstance + load ran on every draft read/write).
+- Dates: DateFmt keeps one formatter per locale (the list built one per row).
+- Blur: liveBlurEdge blurs at 1/4 resolution and reuses its Paint (about 16x fewer pixels per frame).
+- Navigation: system back gesture drives the same interactive push/pop as the edge swipe (PredictiveBackHandler, chat + settings); push animation starts after at most ~110 ms + 1 frame instead of up to ~310 ms; dim layers use drawBehind (no graphics layer); notification-preference flows are collected only inside the settings overlay.
+- Build: Compose stability config (compose_compiler_config.conf), baseline-prof.txt, lifecycle-runtime-ktx, LeakCanary (debug only). versionCode 23 / 3.3.
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails. If the build complains about baseline-prof.txt, delete that file first.
+
+### Known, not changed
+- app/release.jks and its fallback passwords are in the repository (see README / reply): move them to GitHub Secrets.

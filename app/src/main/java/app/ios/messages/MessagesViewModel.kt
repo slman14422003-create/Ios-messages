@@ -274,7 +274,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
-    fun nameFor(address: String): String = repo.contactName(address) ?: address
+    /** Cache hit in the normal case; a miss is one indexed lookup (the cache lock is no longer held during queries). */
+    fun nameFor(address: String): String = repo.cachedName(address) ?: repo.contactName(address) ?: address
 
     fun openChat(threadId: Long?, address: String?) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -283,6 +284,17 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
             openThread = tid
             AppState.openKey = address?.let { prefs.key(it) }
             address?.let { Notifier.cancel(getApplication(), it) }
+            // Load just this conversation first so the screen can slide in right away; the full
+            // list refresh (several provider queries) happens after.
+            if (tid != null) {
+                try {
+                    val m = repo.messages(tid)
+                    if (openThread == tid) _messages.value = m
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
+            }
             refresh()
         }
     }

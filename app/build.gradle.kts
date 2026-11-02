@@ -12,8 +12,8 @@ android {
         applicationId = "app.ios.messages"
         minSdk = 31
         targetSdk = 36
-        versionCode = 22
-        versionName = "3.2"
+        versionCode = 23
+        versionName = "3.3"
         // SHA-256 of the release signing certificate. At start-up the app compares it with the
         // certificate it is actually signed with; a re-signed / re-packaged copy locks itself.
         // If you ever change release.jks, update this value (keytool -list -v -keystore release.jks).
@@ -45,7 +45,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+        // Treat kotlin.collections.* and our model classes as stable: List<Conversation> / List<Message>
+        // parameters no longer force every screen to recompose when an unrelated state changes.
+        freeCompilerArgs += listOf(
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:stabilityConfigurationPath=" +
+                "${project.projectDir}/compose_compiler_config.conf"
+        )
+    }
     lint {
         checkReleaseBuilds = false
         abortOnError = false
@@ -69,4 +78,8 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+    // lifecycleScope (used to run the integrity re-check off the main thread). Already in the graph; made explicit.
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    // Debug builds only (github.com/square/leakcanary): finds leaked activities / popups. Not shipped in release.
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
 }

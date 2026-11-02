@@ -27,15 +27,21 @@ internal fun subIdOf(intent: Intent): Int {
 /** Incoming SMS (only delivered here while we are the default SMS app). */
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        try {
-            handle(context, intent)
-        } catch (e: Throwable) {
-            android.util.Log.e("IosMessages", "receiver failed", e)
-        }
+        if (intent.action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
+        // The Telephony provider insert can be slow: never block the main thread inside a receiver.
+        val pending = goAsync()
+        Thread {
+            try {
+                handle(context.applicationContext, intent)
+            } catch (e: Throwable) {
+                android.util.Log.e("IosMessages", "receiver failed", e)
+            } finally {
+                pending.finish()
+            }
+        }.start()
     }
 
     private fun handle(context: Context, intent: Intent) {
-        if (intent.action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
         val msgs = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (msgs.isNullOrEmpty()) return
         val address = msgs[0].displayOriginatingAddress ?: return
@@ -62,20 +68,18 @@ class SmsReceiver : BroadcastReceiver() {
 
 class MmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        try {
-            handle(context, intent)
-        } catch (e: Throwable) {
-            android.util.Log.e("IosMessages", "receiver failed", e)
-        }
-    }
-
-    private fun handle(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.WAP_PUSH_DELIVER_ACTION) return
         val data = intent.getByteArrayExtra("data") ?: return
-        try {
-            Mms.download(context, data, subIdOf(intent))
-        } catch (_: Exception) {
-        }
+        val sub = subIdOf(intent)
+        val pending = goAsync()
+        Thread {
+            try {
+                Mms.download(context.applicationContext, data, sub)
+            } catch (_: Throwable) {
+            } finally {
+                pending.finish()
+            }
+        }.start()
     }
 }
 

@@ -12,7 +12,22 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 object DateFmt {
-    private fun shortTime() = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(Locale.getDefault())
+    // DateTimeFormatter is immutable and thread-safe, but building one is slow (locale data lookup).
+    // The conversation list formats a date per row, so keep one per locale instead of one per call.
+    @Volatile private var timeFmt: Pair<Locale, DateTimeFormatter>? = null
+    @Volatile private var dateFmt: Pair<Locale, DateTimeFormatter>? = null
+
+    private fun shortTime(): DateTimeFormatter {
+        val l = Locale.getDefault()
+        timeFmt?.let { if (it.first == l) return it.second }
+        return DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(l).also { timeFmt = l to it }
+    }
+
+    private fun shortDate(): DateTimeFormatter {
+        val l = Locale.getDefault()
+        dateFmt?.let { if (it.first == l) return it.second }
+        return DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(l).also { dateFmt = l to it }
+    }
 
     fun time(ts: Long): String =
         shortTime().format(Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()))
@@ -25,7 +40,7 @@ object DateFmt {
             days <= 0L -> shortTime().format(d)
             days == 1L -> ctx.getString(R.string.yesterday)
             days in 2L..6L -> d.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
-            else -> DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(Locale.getDefault()).format(d)
+            else -> shortDate().format(d)
         }
     }
 

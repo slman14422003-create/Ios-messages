@@ -32,8 +32,11 @@ class SmsRepository(private val ctx: Context) {
     }
     fun clearCache() = synchronized(nameCache) { nameCache.clear() }
 
-    fun contactName(address: String): String? = synchronized(nameCache) {
-        if (nameCache.containsKey(address)) return nameCache[address]
+    /** Cache-only lookup: safe on the main thread. Returns null when the name is unknown or not loaded yet. */
+    fun cachedName(address: String): String? = synchronized(nameCache) { nameCache[address] }
+
+    fun contactName(address: String): String? {
+        synchronized(nameCache) { if (nameCache.containsKey(address)) return nameCache[address] }
         var result: String? = null
         if (has(Manifest.permission.READ_CONTACTS) && address.any { it.isDigit() }) {
             try {
@@ -45,8 +48,8 @@ class SmsRepository(private val ctx: Context) {
             } catch (_: Exception) {
             }
         }
-        nameCache[address] = result
-        result
+        synchronized(nameCache) { nameCache[address] = result }
+        return result
     }
 
     fun conversations(): List<Conversation> {
@@ -56,22 +59,36 @@ class SmsRepository(private val ctx: Context) {
         return withSubIds(list)
     }
 
-    /** Tags each thread with the SIM of its newest message (needs the sub_id column). */
+    /** thread -> (date of the newest message when we looked, SIM of that message). */
+    private val subCache = HashMap<Long, Pair<Long, Int>>()
+
+    /**
+     * Tags each thread with the SIM of its newest message (needs the sub_id column).
+     * Old code scanned the whole SMS table on every refresh; now each thread is queried once and
+     * again only when its newest-message date changed.
+     */
     private fun withSubIds(list: List<Conversation>): List<Conversation> {
         if (list.isEmpty()) return list
-        val subs = HashMap<Long, Int>()
-        try {
-            cr.query(smsUri, arrayOf("thread_id", "sub_id"), null, null, "date DESC")?.use { c ->
-                while (c.moveToNext()) {
-                    val t = c.getLong(0)
-                    val sid = c.getInt(1)
-                    if (sid >= 0 && !subs.containsKey(t)) subs[t] = sid
+        return try {
+            val out = ArrayList<Conversation>(list.size)
+            for (c in list) {
+                if (c.threadId < 0) { out += c; continue }
+                val cached = synchronized(subCache) { subCache[c.threadId] }
+                val sid = if (cached != null && cached.first == c.date) cached.second else {
+                    var found = -1
+                    cr.query(
+                        smsUri, arrayOf("sub_id"), "thread_id=?", arrayOf(c.threadId.toString()),
+                        "date DESC LIMIT 1"
+                    )?.use { q -> if (q.moveToFirst()) found = q.getInt(0) }
+                    synchronized(subCache) { subCache[c.threadId] = c.date to found }
+                    found
                 }
+                out += if (sid >= 0) c.copy(subId = sid) else c
             }
+            out
         } catch (_: Exception) {
-            return list
+            list
         }
-        return list.map { c -> subs[c.threadId]?.let { c.copy(subId = it) } ?: c }
     }
 
     /** Uses the thread table (one row per conversation) instead of scanning every SMS. */

@@ -18,10 +18,13 @@ object SecureStore {
     private const val ALIAS = "ims_local_key_v1"
     private const val PREFIX = "enc1:"
 
+    @Volatile private var cachedKey: SecretKey? = null
+
     @Synchronized
     private fun key(): SecretKey {
+        cachedKey?.let { return it }
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        (ks.getKey(ALIAS, null) as? SecretKey)?.let { cachedKey = it; return it }
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         gen.init(
             KeyGenParameterSpec.Builder(
@@ -32,7 +35,7 @@ object SecureStore {
                 .setKeySize(256)
                 .build()
         )
-        return gen.generateKey()
+        return gen.generateKey().also { cachedKey = it }
     }
 
     /** Encrypts [plain]. If the Keystore is unavailable the text is returned unchanged rather than lost. */

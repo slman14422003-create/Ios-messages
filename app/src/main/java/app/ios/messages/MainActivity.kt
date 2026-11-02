@@ -8,7 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -59,10 +59,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import app.ios.messages.ui.ChatScreen
 import app.ios.messages.ui.ConversationsScreen
 import app.ios.messages.ui.IMessageTheme
@@ -167,8 +169,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (locked) return
-        // A debugger / hook attached while the app was in the background.
-        if (Integrity.verdict(this) != Integrity.Verdict.OK) { recreate(); return }
+        // A debugger / hook attached while the app was in the background (checked off the main thread:
+        // it reads /proc/self/maps).
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            if (Integrity.verdict(this@MainActivity) != Integrity.Verdict.OK) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { recreate() }
+            }
+        }
         AppState.foreground = true
         vm.recheckRole()
         vm.refresh()
@@ -221,18 +228,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     val muted by vm.muted.collectAsStateWithLifecycle()
     val trash by vm.trash.collectAsStateWithLifecycle()
     val contacts by vm.contacts.collectAsStateWithLifecycle()
-    val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
-    val notifications by vm.notifications.collectAsStateWithLifecycle()
-    val previews by vm.previews.collectAsStateWithLifecycle()
-    val notifSound by vm.notifSound.collectAsStateWithLifecycle()
-    val notifVibrate by vm.notifVibrate.collectAsStateWithLifecycle()
-    val notifHeadsUp by vm.notifHeadsUp.collectAsStateWithLifecycle()
-    val notifLockScreen by vm.notifLockScreen.collectAsStateWithLifecycle()
-    val notifQuickReply by vm.notifQuickReply.collectAsStateWithLifecycle()
-    val notifCopyCode by vm.notifCopyCode.collectAsStateWithLifecycle()
-    val notifGroup by vm.notifGroup.collectAsStateWithLifecycle()
     val sims by vm.sims.collectAsStateWithLifecycle()
-    val defaultSub by vm.defaultSub.collectAsStateWithLifecycle()
     val setupDismissed by vm.setupDismissed.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var keepDays by remember { mutableStateOf(Prefs(ctx).keepDays) }
@@ -248,10 +244,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     LaunchedEffect(chat != null) {
         if (chat != null) {
             if (chat?.address != null || chat?.threadId != null) {
-                withTimeoutOrNull(260) { snapshotFlow { messages.isNotEmpty() }.first { it } }
+                withTimeoutOrNull(110) { snapshotFlow { messages.isNotEmpty() }.first { it } }
             }
-            withFrameNanos { }
-            withFrameNanos { }
             withFrameNanos { }
         }
         progress.animateTo(
@@ -287,11 +281,25 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         }
     }
 
-    BackHandler(enabled = chat != null) {
-        chat = null
-        vm.closeChat()
+    // System back gesture drives the same interactive pop as the edge swipe (finger-following, cancellable).
+    val backScope = rememberCoroutineScope()
+    PredictiveBackHandler(enabled = chat != null) { events ->
+        try {
+            events.collect { e -> progress.snapTo((1f - e.progress).coerceIn(0f, 1f)) }
+            chat = null
+            vm.closeChat()
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            backScope.launch { progress.animateTo(1f, Motion.push()) }
+        }
     }
-    BackHandler(enabled = settingsOpen) { settingsOpen = false }
+    PredictiveBackHandler(enabled = settingsOpen) { events ->
+        try {
+            events.collect { e -> settingsProgress.snapTo((1f - e.progress).coerceIn(0f, 1f)) }
+            settingsOpen = false
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            backScope.launch { settingsProgress.animateTo(1f, Motion.push()) }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxSize().graphicsLayer { translationX = -maxOf(progress.value, settingsProgress.value) * size.width * 0.3f * dir }) {
@@ -329,7 +337,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         }
 
         if (chatVisible || chat != null) {
-            Box(Modifier.fillMaxSize().graphicsLayer { alpha = progress.value * 0.25f }.background(Color.Black))
+            Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = progress.value * 0.25f) })
             shown?.let { t ->
                 LaunchedEffect(t) {
                     if (t.address != null || t.threadId != null) vm.openChat(t.threadId, t.address)
@@ -380,7 +388,20 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         }
 
         if (settingsVisible || settingsOpen) {
-            Box(Modifier.fillMaxSize().graphicsLayer { alpha = settingsProgress.value * 0.25f }.background(Color.Black))
+            // Collected only while the settings screen exists, so toggling a preference no longer
+            // recomposes the whole app root.
+            val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
+            val notifications by vm.notifications.collectAsStateWithLifecycle()
+            val previews by vm.previews.collectAsStateWithLifecycle()
+            val notifSound by vm.notifSound.collectAsStateWithLifecycle()
+            val notifVibrate by vm.notifVibrate.collectAsStateWithLifecycle()
+            val notifHeadsUp by vm.notifHeadsUp.collectAsStateWithLifecycle()
+            val notifLockScreen by vm.notifLockScreen.collectAsStateWithLifecycle()
+            val notifQuickReply by vm.notifQuickReply.collectAsStateWithLifecycle()
+            val notifCopyCode by vm.notifCopyCode.collectAsStateWithLifecycle()
+            val notifGroup by vm.notifGroup.collectAsStateWithLifecycle()
+            val defaultSub by vm.defaultSub.collectAsStateWithLifecycle()
+            Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = settingsProgress.value * 0.25f) })
             Box(
                 Modifier
                     .fillMaxSize()

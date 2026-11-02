@@ -263,7 +263,13 @@ private fun ChatScreenBody(
     val locPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         if (r.values.any { it }) addLocation()
     }
-    val rev = remember(messages) { buildItems(itemsCtx, messages).asReversed() }
+    // Grouping, date headers and tail flags are computed off the main thread so opening a long
+    // chat does not stall the slide-in animation.
+    val rev by androidx.compose.runtime.produceState<List<ChatItem>>(emptyList(), messages) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            buildItems(itemsCtx, messages).asReversed()
+        }
+    }
     val listState = rememberLazyListState()
     val liveTop = remember { LiveBlur() }
     val matches = remember(rev, searchQuery, searchOpen) {

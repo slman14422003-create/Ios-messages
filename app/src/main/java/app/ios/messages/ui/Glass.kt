@@ -238,9 +238,13 @@ fun GlassFill(
 class LiveBlur {
     val src = RenderNode("lbSrc")
     val blur = RenderNode("lbBlur")
+    val layerPaint = Paint()
     var radius = -1f
     var broken = false
 }
+
+/** The strip under a bar is blurred at 1/4 size (16x fewer pixels) and scaled back up: same look, far cheaper per frame. */
+private const val BLUR_DOWN = 4f
 
 /**
  * Live "bar material": the list is recorded once, then the strip under a bar (top or bottom)
@@ -282,20 +286,24 @@ fun Modifier.liveBlurEdge(
     contentDrawn = true
 
     val oy = if (bottom) (fullH - bh).toFloat() else 0f
-    h.blur.setPosition(0, 0, w, bh)
-    if (h.radius != radiusPx) {
+    val sw = ((w + 3) / 4).coerceAtLeast(1)
+    val sh = ((bh + 3) / 4).coerceAtLeast(1)
+    val smallRadius = (radiusPx / BLUR_DOWN).coerceAtLeast(0.5f)
+    h.blur.setPosition(0, 0, sw, sh)
+    if (h.radius != smallRadius) {
         val cm = android.graphics.ColorMatrix().apply { setSaturation(1.8f) }
         h.blur.setRenderEffect(
             RenderEffect.createColorFilterEffect(
                 ColorMatrixColorFilter(cm),
-                RenderEffect.createBlurEffect(radiusPx, radiusPx, Shader.TileMode.CLAMP)
+                RenderEffect.createBlurEffect(smallRadius, smallRadius, Shader.TileMode.CLAMP)
             )
         )
-        h.radius = radiusPx
+        h.radius = smallRadius
     }
     val rb = h.blur.beginRecording()
     try {
         rb.drawColor(bg.toArgb())
+        rb.scale(1f / BLUR_DOWN, 1f / BLUR_DOWN)
         rb.translate(0f, -oy)
         rb.drawRenderNode(h.src)
     } finally {
@@ -303,12 +311,15 @@ fun Modifier.liveBlurEdge(
     }
 
     val bounds = Rect(0f, 0f, size.width, hh)
-    val layerPaint = Paint().apply { alpha = a }
+    h.layerPaint.alpha = a
     drawIntoCanvas { c ->
         c.save()
         c.translate(0f, oy)
-        c.saveLayer(bounds, layerPaint)
+        c.saveLayer(bounds, h.layerPaint)
+        c.save()
+        c.scale(BLUR_DOWN, BLUR_DOWN)
         c.nativeCanvas.drawRenderNode(h.blur)
+        c.restore()
         drawRect(tint, size = Size(size.width, hh))
         if (fade) {
             drawRect(
