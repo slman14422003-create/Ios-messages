@@ -254,3 +254,9 @@
 - app/src/main/res/drawable/ic_launcher_foreground.png
 - app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml, ic_launcher_round.xml
 - app/src/main/res/mipmap-*/ic_launcher.png, ic_launcher_round.png
+
+### Fix: black edges around the launcher icon
+- Cause: transparent adaptive background is drawn black by the launcher
+- res/drawable/ic_launcher_background.png recreated: vertical green gradient sampled from the squircle edge colors
+- ic_launcher_foreground.png: squircle now about 73dp wide (fills the 72dp visible area like other icons), bubble stays inside the safe zone
+- mipmap-anydpi-v26/ic_launcher.xml, ic_launcher_round.xml: background points to @drawable/ic_launcher_background again
