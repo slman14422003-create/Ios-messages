@@ -200,6 +200,40 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var prefetch: kotlinx.coroutines.Job? = null
+    private var downX = 0f
+    private var downY = 0f
+
+    /** While a finger rests on the screen for a moment, grab the backdrop early so a long-press menu opens with its blur ready. */
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (!locked) {
+            when (ev.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = ev.rawX
+                    downY = ev.rawY
+                    prefetch?.cancel()
+                    app.ios.messages.ui.BackdropCache.clear()
+                    prefetch = lifecycleScope.launch {
+                        kotlinx.coroutines.delay(200)
+                        app.ios.messages.ui.BackdropCache.put(app.ios.messages.ui.captureBackdrop(window.decorView))
+                    }
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+                    if (Math.abs(ev.rawX - downX) > slop || Math.abs(ev.rawY - downY) > slop) {
+                        prefetch?.cancel()
+                        app.ios.messages.ui.BackdropCache.clear()
+                    }
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    prefetch?.cancel()
+                    app.ios.messages.ui.BackdropCache.clear()
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onPause() {
         AppState.foreground = false
         super.onPause()
@@ -329,6 +363,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
+        app.ios.messages.ui.BlurWarmUp()
         Box(Modifier.fillMaxSize().graphicsLayer {
             val pr = maxOf(progress.value, settingsProgress.value)
             translationX = -pr * size.width * 0.3f * dir

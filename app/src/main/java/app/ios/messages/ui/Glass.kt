@@ -12,6 +12,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -492,5 +494,62 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBlurStrip(
         }
         c.restore()
         c.restore()
+    }
+}
+
+
+/**
+ * A snapshot taken while a finger is still held on the screen (before the long-press fires), so the blur behind a
+ * context menu is ready the moment the menu opens instead of arriving a few frames later.
+ */
+object BackdropCache {
+    private var snap: Backdrop? = null
+    private var at = 0L
+
+    @Synchronized fun put(b: Backdrop?) {
+        snap = b
+        at = System.currentTimeMillis()
+    }
+
+    @Synchronized fun clear() {
+        snap = null
+    }
+
+    /** Returns the prefetched snapshot once (and only if it is recent and the window size is unchanged). */
+    @Synchronized fun take(view: View): Backdrop? {
+        val b = snap ?: return null
+        snap = null
+        val decor = view.context.findActivity()?.window?.decorView ?: return null
+        val fresh = System.currentTimeMillis() - at < 2500L
+        return if (fresh && b.width == decor.width && b.height == decor.height) b else null
+    }
+}
+
+/**
+ * Runs the expensive first-time work of the blur path once, right after start-up (shader compile, PixelCopy,
+ * RenderEffect), invisibly, so the first menu / long press is as smooth as the hundredth.
+ */
+@Composable
+fun BlurWarmUp() {
+    val view = LocalView.current
+    var on by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(600)
+        runCatching { captureBackdrop(view) }
+        kotlinx.coroutines.delay(900)
+        on = false
+    }
+    if (on) {
+        val cf = remember { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.8f) }) }
+        Spacer(
+            Modifier
+                .padding(top = 1.dp)
+                .size(48.dp)
+                .graphicsLayer { alpha = 0.02f; renderEffect = BlurEffect(6f, 6f, TileMode.Clamp) }
+                .drawBehind {
+                    drawRect(Color(0xFF808080), colorFilter = cf)
+                    drawRect(Brush.verticalGradient(listOf(Color.White, Color.Black)))
+                }
+        )
     }
 }

@@ -377,7 +377,7 @@ fun ContextOverlay(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     LaunchedEffect(Unit) {
         runCatching { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) }
-        launch { snap = captureBackdrop(host) }
+        launch { snap = BackdropCache.take(host) ?: captureBackdrop(host) }
         a.animateTo(1f, Motion.menuIn())
     }
     val ready by animateFloatAsState(if (snap != null) 1f else 0f, Motion.fade(220), label = "overlayBlur")
