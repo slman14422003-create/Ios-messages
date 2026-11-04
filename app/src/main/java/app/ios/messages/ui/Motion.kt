@@ -12,23 +12,23 @@ import androidx.compose.animation.core.CubicBezierEasing
  */
 object Motion {
     /** UINavigationController push/pop (damping ratio 1, ~0.5s settle). */
-    fun <T> push(): FiniteAnimationSpec<T> = spring(dampingRatio = 1f, stiffness = 330f)
+    fun <T> push(): FiniteAnimationSpec<T> = spring(dampingRatio = 1f, stiffness = 430f)
 
     /** Button press scale: fast down, soft settle on release. */
     fun <T> press(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.72f, stiffness = 900f)
 
     /** Popup menus: pop from the anchor with a barely visible overshoot. */
-    fun <T> menuIn(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.8f, stiffness = 560f)
+    fun <T> menuIn(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.82f, stiffness = 700f)
     fun <T> menuOut(): FiniteAnimationSpec<T> = tween(170, easing = EaseOutIos)
 
     /** Elements entering/leaving (send button, emoji button, SIM chip). */
-    fun <T> pop(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.7f, stiffness = 650f)
+    fun <T> pop(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.72f, stiffness = 820f)
 
     /** Layout changes (text field growing, list reorder, keyboard-like panels). */
-    fun <T> layout(): FiniteAnimationSpec<T> = spring(dampingRatio = 1f, stiffness = 520f)
+    fun <T> layout(): FiniteAnimationSpec<T> = spring(dampingRatio = 1f, stiffness = 700f)
 
     /** New message bubble flying up from the input bar. */
-    fun <T> bubble(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.82f, stiffness = 460f)
+    fun <T> bubble(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.85f, stiffness = 620f)
 
     /** UISwitch knob. */
     fun <T> knob(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.8f, stiffness = 700f)
