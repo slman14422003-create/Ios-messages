@@ -212,4 +212,5 @@
     <string name="battery_unrestricted">البطارية: بدون قيود</string>
     <string name="show_sim_label">إظهار اسم الشريحة</string>
     <string name="notif_blur">بلور البانر</string>
+    <string name="banner_overlay">بانر عند إغلاق التطبيق</string>
 </resources>

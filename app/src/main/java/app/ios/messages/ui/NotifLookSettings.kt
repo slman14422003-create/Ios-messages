@@ -95,6 +95,17 @@ fun NotificationLookSection() {
         SettingRow(stringResource(R.string.banner_in_app)) {
             IosSwitch(enabled) { enabled = it; prefs.bannerEnabled = it }
         }
+        Hairline(Modifier.padding(start = 16.dp))
+        var overlayOn by remember { mutableStateOf(prefs.bannerOverlay && android.provider.Settings.canDrawOverlays(ctx)) }
+        SettingRow(stringResource(R.string.banner_overlay)) {
+            IosSwitch(overlayOn) { on ->
+                prefs.bannerOverlay = on
+                if (on && !android.provider.Settings.canDrawOverlays(ctx)) {
+                    runCatching { ctx.startActivity(app.ios.messages.OverlayBanner.permissionIntent(ctx)) }
+                }
+                overlayOn = on
+            }
+        }
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(stringResource(R.string.notif_color), color = p.label, fontSize = 17.sp)
             Spacer(Modifier.size(10.dp))

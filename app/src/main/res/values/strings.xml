@@ -212,4 +212,5 @@
     <string name="battery_unrestricted">Battery: Unrestricted</string>
     <string name="show_sim_label">Show SIM Name</string>
     <string name="notif_blur">Banner Blur</string>
+    <string name="banner_overlay">Banner When App Is Closed</string>
 </resources>
