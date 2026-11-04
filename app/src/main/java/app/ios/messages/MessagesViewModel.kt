@@ -306,8 +306,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (_: Exception) {
                 }
             }
-            // Let the push animation finish before the heavy full refresh runs.
-            refresh(debounce = true)
+            // The full refresh (many provider queries + big recomposition) is started by the UI once the
+            // slide-in animation has finished (see App in MainActivity).
         }
     }
 

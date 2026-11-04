@@ -182,12 +182,13 @@ fun ChatScreen(
     onDeleteMessage: (Long) -> Unit,
     onPickSim: (Int) -> Unit,
     onDraft: (String) -> Unit,
-    onRetry: (Message, Int) -> Unit
+    onRetry: (Message, Int) -> Unit,
+    onReady: () -> Unit = {}
 ) {
     CompositionLocalProvider(LocalSims provides sims) {
         ChatScreenBody(
             target, messages, isDefault, sims, initialSim, initialDraft,
-            onBack, onSend, onDeleteMessage, onPickSim, onDraft, onRetry
+            onBack, onSend, onDeleteMessage, onPickSim, onDraft, onRetry, onReady
         )
     }
 }
@@ -206,7 +207,8 @@ private fun ChatScreenBody(
     onDeleteMessage: (Long) -> Unit,
     onPickSim: (Int) -> Unit,
     onDraft: (String) -> Unit,
-    onRetry: (Message, Int) -> Unit
+    onRetry: (Message, Int) -> Unit,
+    onReady: () -> Unit
 ) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
@@ -302,11 +304,14 @@ private fun ChatScreenBody(
         }
     }
     LaunchedEffect(rev.isNotEmpty()) { if (rev.isNotEmpty()) listReady = true }
-    val listAlpha by animateFloatAsState(
-        if (rev.isEmpty()) 0f else 1f,
-        Motion.fade(240),
-        label = "list"
-    )
+    val readyCb by rememberUpdatedState(onReady)
+    LaunchedEffect(rev.isNotEmpty()) {
+        if (rev.isNotEmpty()) {
+            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { }
+            readyCb()
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(p.bg).imePadding()) {
         LazyColumn(
@@ -314,7 +319,6 @@ private fun ChatScreenBody(
             reverseLayout = true,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = listAlpha }
                 .liveBlurEdges(
                     liveTop,
                     { headerH + fadeTail }, { 1f },
@@ -406,7 +410,7 @@ private fun ChatScreenBody(
                     GlassCircle(
                         44.dp,
                         Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 8.dp),
-                        onClick = onBack
+                        onClick = { kbc?.hide(); onBack() }
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
                     if (menu) ContactSheet(name, address, { searchOpen = true; searchQuery = ""; searchPos = 0 }) { menu = false }
                     Column(

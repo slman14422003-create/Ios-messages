@@ -254,6 +254,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
 
     var chat by rememberSaveable { mutableStateOf<ChatTarget?>(null) }
     var lastChat by remember { mutableStateOf<ChatTarget?>(null) }
+    var chatReady by remember { mutableStateOf(false) }
     val shown = chat ?: lastChat
     LaunchedEffect(chat) { if (chat != null) lastChat = chat }
 
@@ -263,7 +264,10 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     LaunchedEffect(chat != null) {
         if (chat != null) {
             if (chat?.address != null || chat?.threadId != null) {
-                withTimeoutOrNull(180) { snapshotFlow { messages.isNotEmpty() }.first { it } }
+                chatReady = false
+                // Wait until the chat list has really been composed and laid out, so that work does not
+                // land inside the slide-in animation.
+                withTimeoutOrNull(320) { snapshotFlow { chatReady }.first { it } }
             }
             withFrameNanos { }
         }
@@ -271,7 +275,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             if (chat != null) 1f else 0f,
             Motion.push()
         )
-        if (chat == null) vm.clearMessages()
+        if (chat == null) vm.clearMessages() else vm.refresh()
     }
     val chatVisible by remember { derivedStateOf { progress.value > 0.001f } }
 
@@ -367,7 +371,11 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 LaunchedEffect(t) {
                     if (t.address != null || t.threadId != null) vm.openChat(t.threadId, t.address)
                 }
-                Box(Modifier.fillMaxSize().graphicsLayer { translationX = (1f - progress.value) * size.width * dir }) {
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    translationX = (1f - progress.value) * size.width * dir
+                    compositingStrategy = if (progress.value > 0.001f && progress.value < 0.999f) androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+                    else androidx.compose.ui.graphics.CompositingStrategy.Auto
+                }) {
                     Box(
                         Modifier
                             .align(Alignment.CenterStart)
@@ -405,7 +413,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                             onDeleteMessage = vm::deleteMessage,
                             onPickSim = { sub -> vm.pickSim(t.address.orEmpty(), sub) },
                             onDraft = { d -> vm.saveDraft(t.address.orEmpty(), d) },
-                            onRetry = { m, sub -> vm.retry(t.address.orEmpty(), m, sub) }
+                            onRetry = { m, sub -> vm.retry(t.address.orEmpty(), m, sub) },
+                            onReady = { chatReady = true }
                         )
                     }
                 }
