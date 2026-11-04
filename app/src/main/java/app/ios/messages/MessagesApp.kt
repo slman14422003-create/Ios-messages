@@ -16,6 +16,7 @@ class MessagesApp : Application() {
             }
             old?.uncaughtException(t, e)
         }
+        app.ios.messages.ui.Perf.cheapBlur = app.ios.messages.data.Prefs(this).smoothMode
         Thread { Sounds.warmUp(this) }.start()
     }
 }

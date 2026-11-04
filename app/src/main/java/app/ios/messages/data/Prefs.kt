@@ -74,6 +74,11 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("banner_overlay", true)
         set(v) { sp.edit().putBoolean("banner_overlay", v).apply() }
 
+    /** Smooth mode: lists use cheap static bars instead of live blur. */
+    var smoothMode: Boolean
+        get() = sp.getBoolean("smooth_mode", true)
+        set(v) { sp.edit().putBoolean("smooth_mode", v).apply() }
+
     var bannerEnabled: Boolean
         get() = sp.getBoolean("banner_enabled", true)
         set(v) { sp.edit().putBoolean("banner_enabled", v).apply() }

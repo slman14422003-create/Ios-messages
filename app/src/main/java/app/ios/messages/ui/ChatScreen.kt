@@ -337,7 +337,8 @@ private fun ChatScreenBody(
                 bottom = with(density) { inputH.toDp() } + 6.dp
             )
         ) {
-            items(rev, key = { it.key }, contentType = { it::class }) { item ->
+            items(rev.size, key = { rev.getOrNull(it)?.key ?: "i$it" }, contentType = { rev.getOrNull(it)?.let { x -> x::class } }) { idx ->
+                val item = rev.getOrNull(idx) ?: return@items
                 when (item) {
                     is ChatItem.Time -> TimeHeader(item)
                     is ChatItem.Bubble -> BubbleRow(
@@ -349,7 +350,7 @@ private fun ChatScreenBody(
                         onDeleteMessage,
                         { reveal.value },
                         { viewing = it },
-                        if (listReady) Modifier.animateItemPlacement(Motion.layout()) else Modifier
+                        if (listReady && idx < 6) Modifier.animateItemPlacement(Motion.layout()) else Modifier
                     )
                     is ChatItem.Status -> Column(
                         Modifier.fillMaxWidth().padding(top = 3.dp, end = 16.dp),
@@ -627,7 +628,7 @@ private fun BubbleContent(
     val shape = remember(mine, b.tail) { BubbleShape(mine, b.tail) }
     val linkColor = if (mine) Color.White else p.blue
     val annotated = remember(b.m.body, linkColor) { linkify(b.m.body, linkColor) }
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val layoutRef = remember { arrayOfNulls<TextLayoutResult>(1) }
     val padStart = if (mine) 12.dp else 18.dp
     val padEnd = if (mine) 18.dp else 12.dp
     val hasText = b.m.body.isNotBlank()
@@ -658,7 +659,7 @@ private fun BubbleContent(
             if (b.m.images.isNotEmpty()) Spacer(Modifier.height(2.dp))
             Text(
                 text = annotated,
-                onTextLayout = { layout = it },
+                onTextLayout = { layoutRef[0] = it },
                 color = if (mine) Color.White else p.receivedText,
                 fontSize = 17.sp,
                 lineHeight = 22.sp,
@@ -672,7 +673,7 @@ private fun BubbleContent(
                             detectTapGestures(
                                 onLongPress = { onLongPress() },
                                 onTap = { pos ->
-                                    val l = layout ?: return@detectTapGestures
+                                    val l = layoutRef[0] ?: return@detectTapGestures
                                     val off = l.getOffsetForPosition(Offset(pos.x - ox, pos.y - oy))
                                     val hit = annotated.getStringAnnotations(off, off).firstOrNull()
                                         ?: return@detectTapGestures
@@ -717,8 +718,9 @@ private fun BubbleRow(
     val boundsRef = remember { arrayOfNulls<Rect>(1) }
     val coordsRef = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
     val timeLabel = remember(b.m.date) { DateFmt.time(b.m.date) }
-    val appear = remember { Animatable(if (System.currentTimeMillis() - b.m.date < 4000L) 0f else 1f) }
-    LaunchedEffect(Unit) {
+    val isNew = remember { System.currentTimeMillis() - b.m.date < 4000L }
+    val appear = remember { Animatable(if (isNew) 0f else 1f) }
+    if (isNew) LaunchedEffect(Unit) {
         if (appear.value < 1f) appear.animateTo(1f, Motion.bubble())
     }
     val bdir = rtlSign()

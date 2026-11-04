@@ -177,8 +177,27 @@ class MainActivity : ComponentActivity() {
             }
         }
         AppState.foreground = true
+        requestHighRefresh()
         vm.recheckRole()
         vm.refresh()
+    }
+
+    /** Ask the display for its highest refresh rate at the current resolution (90 / 120 Hz panels). */
+    private fun requestHighRefresh() {
+        try {
+            val d = display ?: return
+            val cur = d.mode
+            val best = d.supportedModes
+                .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+                .maxByOrNull { it.refreshRate } ?: return
+            val lp = window.attributes
+            if (lp.preferredDisplayModeId != best.modeId) {
+                lp.preferredDisplayModeId = best.modeId
+                lp.preferredRefreshRate = best.refreshRate
+                window.attributes = lp
+            }
+        } catch (_: Throwable) {
+        }
     }
 
     override fun onPause() {
@@ -244,7 +263,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     LaunchedEffect(chat != null) {
         if (chat != null) {
             if (chat?.address != null || chat?.threadId != null) {
-                withTimeoutOrNull(110) { snapshotFlow { messages.isNotEmpty() }.first { it } }
+                withTimeoutOrNull(180) { snapshotFlow { messages.isNotEmpty() }.first { it } }
             }
             withFrameNanos { }
         }
@@ -302,7 +321,13 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -maxOf(progress.value, settingsProgress.value) * size.width * 0.3f * dir }) {
+        Box(Modifier.fillMaxSize().graphicsLayer {
+            val pr = maxOf(progress.value, settingsProgress.value)
+            translationX = -pr * size.width * 0.3f * dir
+            // While sliding, keep the screen behind as one cached texture instead of re-drawing it every frame.
+            compositingStrategy = if (pr > 0.001f && pr < 0.999f) androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+            else androidx.compose.ui.graphics.CompositingStrategy.Auto
+        }) {
             ConversationsScreen(
                 conversations = conversations,
                 sims = sims,

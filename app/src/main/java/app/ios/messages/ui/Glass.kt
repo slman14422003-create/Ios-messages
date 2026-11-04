@@ -234,6 +234,29 @@ fun GlassFill(
     }
 }
 
+/** Global switch: true = lists use cheap static bars instead of live blur (far smoother, esp. at 90/120 Hz). */
+object Perf {
+    @Volatile var cheapBlur = true
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCheapBar(
+    bottom: Boolean, hh: Float, a: Float, bg: Color, fade: Boolean
+) {
+    val c = bg.copy(alpha = 0.95f * a)
+    val y = if (bottom) size.height - hh else 0f
+    val sz = Size(size.width, hh)
+    if (!fade) {
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(0f, y), size = sz)
+        return
+    }
+    val brush = if (bottom) {
+        Brush.verticalGradient(0f to Color.Transparent, 0.3f to c, 1f to c, startY = y, endY = y + hh)
+    } else {
+        Brush.verticalGradient(0f to c, 0.7f to c, 1f to Color.Transparent, startY = y, endY = y + hh)
+    }
+    drawRect(brush, topLeft = androidx.compose.ui.geometry.Offset(0f, y), size = sz)
+}
+
 /** Holds the two render nodes used for live backdrop blur of a scrolling list. */
 class LiveBlur {
     val src = RenderNode("lbSrc")
@@ -266,6 +289,11 @@ fun Modifier.liveBlurEdge(
     val hh = heightPx().coerceAtMost(size.height)
     if (h.broken || a <= 0.01f || hh <= 1f || size.width < 1f) {
         drawContent()
+        return@drawWithContent
+    }
+    if (Perf.cheapBlur) {
+        drawContent()
+        drawCheapBar(bottom, hh, a, bg, fade)
         return@drawWithContent
     }
     var contentDrawn = false
@@ -368,6 +396,12 @@ fun Modifier.liveBlurEdges(
     val doBottom = ba > 0.01f && bh > 1f
     if (h.broken || size.width < 1f || (!doTop && !doBottom)) {
         drawContent()
+        return@drawWithContent
+    }
+    if (Perf.cheapBlur) {
+        drawContent()
+        if (doBottom) drawCheapBar(true, bh, ba, bg, fade)
+        if (doTop) drawCheapBar(false, th, ta, bg, fade)
         return@drawWithContent
     }
     var contentDrawn = false
