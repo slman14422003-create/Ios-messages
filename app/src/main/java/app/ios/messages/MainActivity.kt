@@ -273,9 +273,13 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         }
         progress.animateTo(
             if (chat != null) 1f else 0f,
-            Motion.push()
+            Motion.pushF()
         )
-        if (chat == null) vm.clearMessages() else vm.refresh()
+        if (chat == null) vm.clearMessages() else {
+            // Let the settled screen draw a few frames before the full reload starts.
+            kotlinx.coroutines.delay(250)
+            vm.refresh()
+        }
     }
     val chatVisible by remember { derivedStateOf { progress.value > 0.001f } }
 
@@ -283,7 +287,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     LaunchedEffect(settingsOpen) {
         settingsProgress.animateTo(
             if (settingsOpen) 1f else 0f,
-            Motion.push()
+            Motion.pushF()
         )
     }
     val settingsVisible by remember { derivedStateOf { settingsProgress.value > 0.001f } }
@@ -312,7 +316,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             chat = null
             vm.closeChat()
         } catch (c: kotlinx.coroutines.CancellationException) {
-            backScope.launch { progress.animateTo(1f, Motion.push()) }
+            backScope.launch { progress.animateTo(1f, Motion.pushF()) }
         }
     }
     PredictiveBackHandler(enabled = settingsOpen) { events ->
@@ -320,7 +324,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             events.collect { e -> settingsProgress.snapTo((1f - e.progress).coerceIn(0f, 1f)) }
             settingsOpen = false
         } catch (c: kotlinx.coroutines.CancellationException) {
-            backScope.launch { settingsProgress.animateTo(1f, Motion.push()) }
+            backScope.launch { settingsProgress.animateTo(1f, Motion.pushF()) }
         }
     }
 
@@ -329,7 +333,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             val pr = maxOf(progress.value, settingsProgress.value)
             translationX = -pr * size.width * 0.3f * dir
             // While sliding, keep the screen behind as one cached texture instead of re-drawing it every frame.
-            compositingStrategy = if (pr > 0.001f && pr < 0.999f) androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+            // Stays one cached texture for the whole time a page is on top (no switch at the end of the slide).
+            compositingStrategy = if (pr > 0.001f) androidx.compose.ui.graphics.CompositingStrategy.Offscreen
             else androidx.compose.ui.graphics.CompositingStrategy.Auto
         }) {
             ConversationsScreen(
@@ -373,8 +378,6 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 }
                 Box(Modifier.fillMaxSize().graphicsLayer {
                     translationX = (1f - progress.value) * size.width * dir
-                    compositingStrategy = if (progress.value > 0.001f && progress.value < 0.999f) androidx.compose.ui.graphics.CompositingStrategy.Offscreen
-                    else androidx.compose.ui.graphics.CompositingStrategy.Auto
                 }) {
                     Box(
                         Modifier
