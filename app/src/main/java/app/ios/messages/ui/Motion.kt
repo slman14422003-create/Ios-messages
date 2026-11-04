@@ -12,6 +12,9 @@ import androidx.compose.animation.core.CubicBezierEasing
  */
 object Motion {
     /** UINavigationController push/pop (damping ratio 1, ~0.5s settle). */
+    /** Float version of [push] with a tiny rest threshold: the default (0.01) snapped the last ~1% of the screen width at the end of a slide. */
+    fun pushF(): FiniteAnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 430f, visibilityThreshold = 0.0004f)
+
     fun <T> push(): FiniteAnimationSpec<T> = spring(dampingRatio = 1f, stiffness = 430f)
 
     /** Button press scale: fast down, soft settle on release. */
