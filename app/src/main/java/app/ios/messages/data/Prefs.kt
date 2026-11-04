@@ -69,6 +69,11 @@ class Prefs(ctx: Context) {
     // ---- notification look (in-app banner + system accent) -----------------------------------
 
     /** Show our own banner while the app is open (the system shade cannot be restyled on Android 12+). */
+    /** Also draw the banner over other apps while this app is closed (needs "Display over other apps"). */
+    var bannerOverlay: Boolean
+        get() = sp.getBoolean("banner_overlay", true)
+        set(v) { sp.edit().putBoolean("banner_overlay", v).apply() }
+
     var bannerEnabled: Boolean
         get() = sp.getBoolean("banner_enabled", true)
         set(v) { sp.edit().putBoolean("banner_enabled", v).apply() }

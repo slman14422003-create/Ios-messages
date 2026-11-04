@@ -22,6 +22,7 @@ import app.ios.messages.data.SmsRepository
 object Notifier {
     const val KEY_REPLY = "reply_text"
     const val CH_FAILED = "failed_v3"
+    private const val CH_QUIET = "quiet_v1"
     private const val GROUP = "app.ios.messages.GROUP"
     private const val SUMMARY_ID = 0x5A11
     private const val MAX_LINES = 8
@@ -155,6 +156,28 @@ object Notifier {
             }
         }
 
+        // App closed: draw our own banner over other apps; the system notification is then posted quietly
+        // (no sound / pop-up of its own) so the message still waits in the shade.
+        var overlayShown = false
+        if (!AppState.foreground && prefs.bannerEnabled && prefs.bannerOverlay && OverlayBanner.canShow(ctx)) {
+            val simLabel = if (subId >= 0) runCatching {
+                val sims = Sims.list(ctx)
+                if (sims.size > 1 && prefs.showSimLabel) sims.firstOrNull { it.subId == subId }?.label else null
+            }.getOrNull() else null
+            OverlayBanner.show(ctx, address, title, shownBody, simLabel)
+            alertInForeground(ctx, prefs)
+            overlayShown = true
+            if (nm.getNotificationChannel(CH_QUIET) == null) {
+                nm.createNotificationChannel(
+                    NotificationChannel(CH_QUIET, lc.getString(R.string.messages), NotificationManager.IMPORTANCE_LOW).apply {
+                        setSound(null, null)
+                        enableVibration(false)
+                        setShowBadge(true)
+                    }
+                )
+            }
+        }
+
         val lines = synchronized(history) {
             val l = history.getOrPut(address) { ArrayList() }
             l.add(shownBody to System.currentTimeMillis())
@@ -167,7 +190,7 @@ object Notifier {
         val style = Notification.MessagingStyle(me)
         lines.forEach { (text, time) -> style.addMessage(text, time, sender) }
 
-        val b = Notification.Builder(ctx, channel)
+        val b = Notification.Builder(ctx, if (overlayShown) CH_QUIET else channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(shownBody)
