@@ -235,3 +235,22 @@
 
 ### Known, not changed
 - app/release.jks and its fallback passwords are in the repository (see README / reply): move them to GitHub Secrets.
+
+## Task: Launcher icon replaced with the supplied image (pixel-exact artwork)
+
+### Done
+- Squircle extracted from the 2048px source (241406.jpg) with a clean alpha edge, no shadow, no recolor, no redraw
+- res/drawable/ic_launcher_foreground.png: 1024x1024 transparent canvas, squircle scaled to about 58dp wide so every pixel stays inside a 35dp radius (inside the 72dp visible circle of any launcher mask)
+- res/mipmap-anydpi-v26/ic_launcher.xml and ic_launcher_round.xml: background is transparent, foreground used directly (old 16% inset removed, margin is baked into the png)
+- res/drawable/ic_launcher_background.png removed (no longer referenced)
+- Legacy mipmap-*/ic_launcher*.png regenerated from the same source with LANCZOS (unused at minSdk 31, kept consistent)
+- Monochrome layer unchanged (ic_launcher_monochrome.xml)
+
+### Notes
+- To change the icon size, only the scale of the squircle inside ic_launcher_foreground.png needs to change
+- No compiler in the sandbox: icon change not built, resources only
+
+### Files touched
+- app/src/main/res/drawable/ic_launcher_foreground.png
+- app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml, ic_launcher_round.xml
+- app/src/main/res/mipmap-*/ic_launcher.png, ic_launcher_round.png
