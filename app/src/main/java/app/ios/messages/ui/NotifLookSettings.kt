@@ -96,6 +96,11 @@ fun NotificationLookSection() {
             IosSwitch(enabled) { enabled = it; prefs.bannerEnabled = it }
         }
         Hairline(Modifier.padding(start = 16.dp))
+        var smooth by remember { mutableStateOf(prefs.smoothMode) }
+        SettingRow(stringResource(R.string.smooth_mode)) {
+            IosSwitch(smooth) { smooth = it; prefs.smoothMode = it; Perf.cheapBlur = it }
+        }
+        Hairline(Modifier.padding(start = 16.dp))
         var overlayOn by remember { mutableStateOf(prefs.bannerOverlay && android.provider.Settings.canDrawOverlays(ctx)) }
         SettingRow(stringResource(R.string.banner_overlay)) {
             IosSwitch(overlayOn) { on ->
