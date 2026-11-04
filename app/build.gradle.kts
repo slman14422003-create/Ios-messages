@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("kotlin-parcelize")
 }
 
@@ -47,13 +48,6 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
-        // Treat kotlin.collections.* and our model classes as stable: List<Conversation> / List<Message>
-        // parameters no longer force every screen to recompose when an unrelated state changes.
-        freeCompilerArgs += listOf(
-            "-P",
-            "plugin:androidx.compose.compiler.plugins.kotlin:stabilityConfigurationPath=" +
-                "${project.projectDir}/compose_compiler_config.conf"
-        )
     }
     lint {
         checkReleaseBuilds = false
@@ -63,23 +57,27 @@ android {
         compose = true
         buildConfig = true
     }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
+// Kotlin 2.0 Compose compiler plugin: strong skipping is on by default (fewer needless recompositions).
+composeCompiler {
+    stabilityConfigurationFile.set(rootProject.layout.projectDirectory.file("app/compose_compiler_config.conf"))
+}
+
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     // lifecycleScope (used to run the integrity re-check off the main thread). Already in the graph; made explicit.
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     // Debug builds only (github.com/square/leakcanary): finds leaked activities / popups. Not shipped in release.
     debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
 }

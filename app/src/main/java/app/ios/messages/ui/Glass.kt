@@ -238,8 +238,10 @@ fun GlassFill(
 class LiveBlur {
     val src = RenderNode("lbSrc")
     val blur = RenderNode("lbBlur")
+    val blur2 = RenderNode("lbBlur2")
     val layerPaint = Paint()
     var radius = -1f
+    var radius2 = -1f
     var broken = false
 }
 
@@ -338,5 +340,123 @@ fun Modifier.liveBlurEdge(
     } catch (e: Throwable) {
         h.broken = true
         if (!contentDrawn) drawContent()
+    }
+}
+
+
+/**
+ * Same look as two chained [liveBlurEdge] calls (top bar + bottom bar), but the list is recorded ONCE per
+ * frame instead of twice (the nested version recorded the content, then recorded the recording again).
+ * On mid-range phones this halves the per-frame cost while scrolling a chat.
+ */
+fun Modifier.liveBlurEdges(
+    h: LiveBlur,
+    topHeightPx: () -> Float,
+    topAmount: () -> Float,
+    bottomHeightPx: () -> Float,
+    bottomAmount: () -> Float,
+    bg: Color,
+    tint: Color,
+    radiusPx: Float,
+    fade: Boolean = false
+): Modifier = drawWithContent {
+    val ta = topAmount().coerceIn(0f, 1f)
+    val ba = bottomAmount().coerceIn(0f, 1f)
+    val th = topHeightPx().coerceAtMost(size.height)
+    val bh = bottomHeightPx().coerceAtMost(size.height)
+    val doTop = ta > 0.01f && th > 1f
+    val doBottom = ba > 0.01f && bh > 1f
+    if (h.broken || size.width < 1f || (!doTop && !doBottom)) {
+        drawContent()
+        return@drawWithContent
+    }
+    var contentDrawn = false
+    try {
+        val w = size.width.toInt()
+        val fullH = size.height.toInt()
+        h.src.setPosition(0, 0, w, fullH)
+        val rc = h.src.beginRecording()
+        val old = drawContext.canvas
+        try {
+            drawContext.canvas = Canvas(rc)
+            drawContent()
+        } finally {
+            drawContext.canvas = old
+            h.src.endRecording()
+        }
+        drawIntoCanvas { it.nativeCanvas.drawRenderNode(h.src) }
+        contentDrawn = true
+        if (doBottom) drawBlurStrip(h, h.blur, 0, true, bh, ba, bg, tint, radiusPx, fade)
+        if (doTop) drawBlurStrip(h, h.blur2, 1, false, th, ta, bg, tint, radiusPx, fade)
+    } catch (e: Throwable) {
+        h.broken = true
+        if (!contentDrawn) drawContent()
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBlurStrip(
+    h: LiveBlur,
+    node: RenderNode,
+    slot: Int,
+    bottom: Boolean,
+    hh: Float,
+    a: Float,
+    bg: Color,
+    tint: Color,
+    radiusPx: Float,
+    fade: Boolean
+) {
+    val w = size.width.toInt()
+    val fullH = size.height.toInt()
+    val bh = hh.toInt().coerceAtLeast(1)
+    val oy = if (bottom) (fullH - bh).toFloat() else 0f
+    val sw = ((w + 3) / 4).coerceAtLeast(1)
+    val sh = ((bh + 3) / 4).coerceAtLeast(1)
+    val smallRadius = (radiusPx / BLUR_DOWN).coerceAtLeast(0.5f)
+    node.setPosition(0, 0, sw, sh)
+    val cur = if (slot == 0) h.radius else h.radius2
+    if (cur != smallRadius) {
+        val cm = android.graphics.ColorMatrix().apply { setSaturation(1.8f) }
+        node.setRenderEffect(
+            RenderEffect.createColorFilterEffect(
+                ColorMatrixColorFilter(cm),
+                RenderEffect.createBlurEffect(smallRadius, smallRadius, Shader.TileMode.CLAMP)
+            )
+        )
+        if (slot == 0) h.radius = smallRadius else h.radius2 = smallRadius
+    }
+    val rb = node.beginRecording()
+    try {
+        rb.drawColor(bg.toArgb())
+        rb.scale(1f / BLUR_DOWN, 1f / BLUR_DOWN)
+        rb.translate(0f, -oy)
+        rb.drawRenderNode(h.src)
+    } finally {
+        node.endRecording()
+    }
+    val bounds = Rect(0f, 0f, size.width, hh)
+    h.layerPaint.alpha = a
+    drawIntoCanvas { c ->
+        c.save()
+        c.translate(0f, oy)
+        c.saveLayer(bounds, h.layerPaint)
+        c.save()
+        c.scale(BLUR_DOWN, BLUR_DOWN)
+        c.nativeCanvas.drawRenderNode(node)
+        c.restore()
+        drawRect(tint, size = Size(size.width, hh))
+        if (fade) {
+            drawRect(
+                brush = if (bottom) {
+                    Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black, 1f to Color.Black, startY = 0f, endY = hh)
+                } else {
+                    Brush.verticalGradient(0f to Color.Black, 0.7f to Color.Black, 1f to Color.Transparent, startY = 0f, endY = hh)
+                },
+                size = Size(size.width, hh),
+                blendMode = BlendMode.DstIn
+            )
+        }
+        c.restore()
+        c.restore()
     }
 }

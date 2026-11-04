@@ -277,10 +277,10 @@ private fun ChatScreenBody(
         else rev.mapIndexedNotNull { i, it -> if (it is ChatItem.Bubble && it.m.body.contains(searchQuery, true)) i else null }
     }
     val curMatch = matches.getOrNull(searchPos.coerceIn(0, maxOf(0, matches.size - 1)))
+    val curMatchKey = curMatch?.let { rev.getOrNull(it)?.key }
     LaunchedEffect(matches, searchPos) {
         curMatch?.let { runCatching { listState.animateScrollToItem(it) } }
     }
-    val liveBottom = remember { LiveBlur() }
     var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     val blurPx = with(LocalDensity.current) { 32.dp.toPx() }
     val fadeTail = with(LocalDensity.current) { 24.dp.toPx() }
@@ -315,8 +315,12 @@ private fun ChatScreenBody(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = listAlpha }
-                .liveBlurEdge(liveBottom, true, { inputH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.62f), blurPx, fade = true)
-                .liveBlurEdge(liveTop, false, { headerH + fadeTail }, { 1f }, p.bg, p.bg.copy(alpha = 0.62f), blurPx, fade = true)
+                .liveBlurEdges(
+                    liveTop,
+                    { headerH + fadeTail }, { 1f },
+                    { inputH + fadeTail }, { 1f },
+                    p.bg, p.bg.copy(alpha = 0.62f), blurPx, fade = true
+                )
                 .pointerInput(Unit) {
                     val back = spring<Float>(dampingRatio = 0.8f, stiffness = 380f)
                     detectHorizontalDragGestures(
@@ -339,7 +343,7 @@ private fun ChatScreenBody(
                     is ChatItem.Bubble -> BubbleRow(
                         item,
                         if (!searchOpen || searchQuery.isBlank()) 0
-                        else if (rev.indexOf(item) == curMatch) 2
+                        else if (curMatchKey != null && item.key == curMatchKey) 2
                         else if (item.m.body.contains(searchQuery, true)) 1 else 0,
                         isDefault,
                         onDeleteMessage,
@@ -711,6 +715,7 @@ private fun BubbleRow(
     var menu by remember { mutableStateOf(false) }
     val maxW = (LocalConfiguration.current.screenWidthDp * 0.76f).dp
     val boundsRef = remember { arrayOfNulls<Rect>(1) }
+    val coordsRef = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
     val timeLabel = remember(b.m.date) { DateFmt.time(b.m.date) }
     val appear = remember { Animatable(if (System.currentTimeMillis() - b.m.date < 4000L) 0f else 1f) }
     LaunchedEffect(Unit) {
@@ -738,7 +743,7 @@ private fun BubbleRow(
                         translationY = (1f - v) * 22.dp.toPx()
                         transformOrigin = TransformOrigin(if (mine == (bdir > 0f)) 1f else 0f, 1f)
                     }
-                    .onGloballyPositioned { boundsRef[0] = it.boundsInWindow() }
+                    .onGloballyPositioned { coordsRef[0] = it }
                     .then(
                         if (hl > 0) Modifier.border(
                             if (hl == 2) 2.5.dp else 1.5.dp,
@@ -753,6 +758,7 @@ private fun BubbleRow(
                     interactive = true,
                     onLongPress = {
                         thud()
+                        coordsRef[0]?.takeIf { it.isAttached }?.let { boundsRef[0] = it.boundsInWindow() }
                         menu = true
                     },
                     onImage = onImage

@@ -224,47 +224,52 @@ class SmsRepository(private val ctx: Context) {
         }
     }
 
+    private class MmsRow(val id: Long, val date: Long, val box: Int, val read: Int, val sub: Int)
+
     private fun mmsMessages(threadId: Long, withSub: Boolean, out: MutableList<Message>) {
         val mmsCols = if (withSub) arrayOf("_id", "date", "msg_box", "read", "sub_id")
         else arrayOf("_id", "date", "msg_box", "read")
-        val added = ArrayList<Message>()
+        val rows = ArrayList<MmsRow>()
         cr.query(
             Uri.parse("content://mms"),
             mmsCols,
             "thread_id=? AND (m_type=128 OR m_type=132)", arrayOf(threadId.toString()), "date DESC LIMIT 100"
         )?.use { c ->
             while (c.moveToNext()) {
-                val id = c.getLong(0)
-                val texts = ArrayList<String>()
-                val images = ArrayList<String>()
-                cr.query(
-                    Uri.parse("content://mms/part"),
-                    arrayOf("_id", "ct", "text"),
-                    "mid=?", arrayOf(id.toString()), null
-                )?.use { pc ->
-                    while (pc.moveToNext()) {
-                        val ct = pc.getString(1) ?: ""
-                        when {
-                            ct == "text/plain" -> pc.getString(2)?.let { texts += it }
-                            ct.startsWith("image/") -> images += "content://mms/part/" + pc.getLong(0)
-                        }
-                    }
-                }
-                val box = c.getInt(2)
-                added += Message(
-                    id = -id,
-                    body = texts.joinToString("\n"),
-                    date = c.getLong(1) * 1000L,
-                    mine = box != 1,
-                    read = c.getInt(3) != 0,
-                    images = images,
-                    subId = if (withSub) c.getInt(4) else -1,
-                    failed = box == 5,
-                    sending = box == 4
-                )
+                rows += MmsRow(c.getLong(0), c.getLong(1), c.getInt(2), c.getInt(3), if (withSub) c.getInt(4) else -1)
             }
         }
-        out += added
+        if (rows.isEmpty()) return
+        // One query for the parts of all messages (was: one query per message = up to 100 round trips).
+        val texts = HashMap<Long, ArrayList<String>>()
+        val images = HashMap<Long, ArrayList<String>>()
+        cr.query(
+            Uri.parse("content://mms/part"),
+            arrayOf("mid", "_id", "ct", "text"),
+            "mid IN (" + rows.joinToString(",") { it.id.toString() } + ")", null, "_id ASC"
+        )?.use { pc ->
+            while (pc.moveToNext()) {
+                val mid = pc.getLong(0)
+                val ct = pc.getString(2) ?: ""
+                when {
+                    ct == "text/plain" -> pc.getString(3)?.let { texts.getOrPut(mid) { ArrayList() } += it }
+                    ct.startsWith("image/") -> images.getOrPut(mid) { ArrayList() } += "content://mms/part/" + pc.getLong(1)
+                }
+            }
+        }
+        for (r in rows) {
+            out += Message(
+                id = -r.id,
+                body = (texts[r.id] ?: emptyList<String>()).joinToString("\n"),
+                date = r.date * 1000L,
+                mine = r.box != 1,
+                read = r.read != 0,
+                images = images[r.id] ?: emptyList(),
+                subId = r.sub,
+                failed = r.box == 5,
+                sending = r.box == 4
+            )
+        }
     }
 
     fun threadIdFor(address: String): Long = Telephony.Threads.getOrCreateThreadId(ctx, address)

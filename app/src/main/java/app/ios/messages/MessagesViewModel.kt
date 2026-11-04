@@ -96,6 +96,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
 
     @Volatile
     private var openThread: Long? = null
+    @Volatile
+    private var simsAt = 0L
     private var job: Job? = null
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -216,11 +218,15 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh(debounce: Boolean = false) {
         job?.cancel()
         job = viewModelScope.launch(Dispatchers.IO) {
-            if (debounce) delay(250)
+            if (debounce) delay(300)
             try {
                 _hasPermission.value = repo.canRead()
                 _isDefault.value = repo.isDefault()
-                _sims.value = Sims.list(getApplication())
+                val now = System.currentTimeMillis()
+                if (now - simsAt > 10_000L || _sims.value.isEmpty()) {
+                    _sims.value = Sims.list(getApplication())
+                    simsAt = now
+                }
                 val base = repo.conversations().map { c ->
                     val d = prefs.draft(c.address)
                     if (d.isBlank()) c else c.copy(draft = d)
@@ -254,15 +260,20 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun recheckRole() {
-        _isDefault.value = repo.isDefault()
-        _hasPermission.value = repo.canRead()
+        val d0 = repo.isDefault()
+        val p0 = repo.canRead()
+        _isDefault.value = d0
+        _hasPermission.value = p0
         viewModelScope.launch {
             delay(500)
             _isDefault.value = repo.isDefault()
             delay(1500)
-            _isDefault.value = repo.isDefault()
-            _hasPermission.value = repo.canRead()
-            refresh()
+            val d1 = repo.isDefault()
+            val p1 = repo.canRead()
+            _isDefault.value = d1
+            _hasPermission.value = p1
+            // Only reload everything when the role / permission really changed (it used to reload on every resume).
+            if (d1 != d0 || p1 != p0) refresh()
         }
     }
 
@@ -295,7 +306,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (_: Exception) {
                 }
             }
-            refresh()
+            // Let the push animation finish before the heavy full refresh runs.
+            refresh(debounce = true)
         }
     }
 
@@ -329,6 +341,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveSim(subId: Int, label: String, color: Long) {
         prefs.setSim(subId, label, color)
+        simsAt = 0L
         refresh()
     }
 

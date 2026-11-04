@@ -111,7 +111,7 @@ fun ConversationsScreen(
     val thud = rememberThud()
     val tick = rememberTick()
     var confirmDelete by remember { mutableStateOf<List<Long>?>(null) }
-    val rowBounds = remember { HashMap<Long, Rect>() }
+    val rowCoords = remember { HashMap<Long, androidx.compose.ui.layout.LayoutCoordinates>() }
 
     val filtered = remember(conversations, filterIdx, simFilter, query) {
         if (filterIdx == 4) emptyList() else conversations.filter { c ->
@@ -149,7 +149,6 @@ fun ConversationsScreen(
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val liveTop = remember { LiveBlur() }
-    val liveBottom = remember { LiveBlur() }
     var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var selBarH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     val blurPx = with(LocalDensity.current) { 22.dp.toPx() }
@@ -168,8 +167,12 @@ fun ConversationsScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .liveBlurEdge(liveBottom, true, { selBarH }, { if (selecting) 1f else 0f }, p.bg, p.bar.copy(alpha = 0.7f), blurPx)
-                .liveBlurEdge(liveTop, false, { headerH }, { collapse }, p.bg, p.bar.copy(alpha = 0.7f), blurPx),
+                .liveBlurEdges(
+                    liveTop,
+                    { headerH }, { collapse },
+                    { selBarH }, { if (selecting) 1f else 0f },
+                    p.bg, p.bar.copy(alpha = 0.7f), blurPx
+                ),
             contentPadding = PaddingValues(top = top + 44.dp, bottom = bottom + if (selecting) 56.dp else 0.dp)
         ) {
             item(key = "title") {
@@ -269,7 +272,7 @@ fun ConversationsScreen(
                     Box(
                         Modifier
                             .background(p.bg)
-                            .onGloballyPositioned { rowBounds[c.threadId] = it.boundsInWindow() }
+                            .onGloballyPositioned { rowCoords[c.threadId] = it }
                     ) {
                         ConversationRow(
                             c = c,
@@ -328,7 +331,12 @@ fun ConversationsScreen(
         }
 
         val menuConv = rowMenu?.let { id -> conversations.firstOrNull { it.threadId == id } }
-        val menuBounds = menuConv?.takeIf { it.threadId !in pinned }?.let { rowBounds[it.threadId] }
+        val menuBounds = remember(menuConv?.threadId) {
+            menuConv?.takeIf { it.threadId !in pinned }
+                ?.let { rowCoords[it.threadId] }
+                ?.takeIf { it.isAttached }
+                ?.boundsInWindow()
+        }
         if (menuConv != null && menuBounds != null) {
             ContextOverlay(
                 bounds = menuBounds,
@@ -344,7 +352,7 @@ fun ConversationsScreen(
                 IosMenuItem(
                     text = { Text(if (menuConv.threadId in pinned) stringResource(R.string.unpin) else stringResource(R.string.pin)) },
                     onClick = {
-                        rowBounds.remove(menuConv.threadId)
+                        rowCoords.remove(menuConv.threadId)
                         rowMenu = null
                         onTogglePin(menuConv.threadId)
                     }
