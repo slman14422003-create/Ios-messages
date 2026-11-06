@@ -62,16 +62,6 @@
     <string name="green_sms">Green (SMS)</string>
     <string name="blue_imessage">Blue (iMessage)</string>
     <string name="notifications">Notifications</string>
-    <string name="allow_notifications">Allow Notifications</string>
-    <string name="show_previews">Show Previews</string>
-    <string name="show_lock_screen">Show on Lock Screen</string>
-    <string name="pop_up">Pop Up on Screen</string>
-    <string name="sound">Sound</string>
-    <string name="vibration">Vibration</string>
-    <string name="quick_reply">Quick Reply</string>
-    <string name="copy_code_button">Copy Code Button</string>
-    <string name="group_notifications">Group Notifications</string>
-    <string name="sound_system_settings">Sound &amp; System Settings</string>
     <string name="permissions">Permissions</string>
     <string name="sms_contacts_access">SMS &amp; Contacts Access</string>
     <string name="allowed">Allowed</string>
@@ -168,20 +158,6 @@
     <string name="search_count">%1$d of %2$d</string>
 
     <!-- Notification style -->
-    <string name="notif_style">Notification Style</string>
-    <string name="notif_style_footer">The banner appears while the app is open, in its own window with its own blur (separate from the app\'s blur). Android does not let apps recolour the system notification shade, so outside the app only the accent colour is applied.</string>
-    <string name="banner_in_app">In-App Banner</string>
-    <string name="notif_color">Banner Color</string>
-    <string name="notif_opacity">Transparency</string>
-    <string name="anim_none">No Animation</string>
-    <string name="anim_slide">Slide Down</string>
-    <string name="anim_pop">Pop</string>
-    <string name="anim_fade">Fade</string>
-    <string name="anim_bounce">Bounce</string>
-    <string name="notif_preview">Preview</string>
-    <string name="notif_preview_play">Play</string>
-    <string name="notif_preview_title">Messages</string>
-    <string name="notif_preview_body">This is how a new message will look.</string>
     <!-- Privacy & security -->
     <string name="privacy_security">Privacy &amp; Security</string>
     <string name="privacy_footer">Everything stays on this phone. Screenshot blocking also hides the app in the recent-apps screen, and turns off the blurred backdrop behind menus.</string>
@@ -197,21 +173,15 @@
     <string name="locked_exit">Close</string>
 
     <!-- Sounds & reliability -->
-    <string name="sounds_title">Sounds</string>
-    <string name="sounds_footer">The iPhone-style tones are bundled in the app (res/raw/msg_received.wav and msg_sent.wav). Replace those two files to use your own.</string>
-    <string name="tone_ios">iPhone-style Tone</string>
-    <string name="tone_system">Phone Default</string>
     <string name="sent_sound">Sent Sound</string>
-    <string name="vib_title">Vibration Pattern</string>
-    <string name="vib_default">Default</string>
-    <string name="vib_double">Double Tap</string>
-    <string name="vib_long">Long</string>
-    <string name="reliability_title">Always Deliver</string>
-    <string name="reliability_footer">Messages arrive even when the app is closed. Android only lets notifications through Do Not Disturb after you allow it on the screen that opens; set the app to Unrestricted so battery saving never delays them.</string>
-    <string name="bypass_dnd">Override Do Not Disturb</string>
-    <string name="battery_unrestricted">Battery: Unrestricted</string>
-    <string name="show_sim_label">Show SIM Name</string>
-    <string name="notif_blur">Banner Blur</string>
-    <string name="banner_overlay">Banner When App Is Closed</string>
     <string name="smooth_mode">Smooth Mode (No Live Blur)</string>
+    <string name="notifications_system">Notification Settings</string>
+    <string name="notifications_system_footer">Sound, pop-up, vibration, lock screen and Do Not Disturb are controlled by Android. Tap to open the system page for this app.</string>
+    <string name="performance_title">Performance</string>
+    <string name="snippet_photo">Photo</string>
+    <string name="snippet_attachment">Attachment</string>
+    <string name="crash_title">The app closed unexpectedly last time</string>
+    <string name="crash_hint">Copy this report to share it with the developer:</string>
+    <string name="crash_copy">Copy</string>
+    <string name="crash_retry">Try opening the app</string>
 </resources>

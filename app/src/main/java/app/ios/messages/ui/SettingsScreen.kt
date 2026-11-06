@@ -57,30 +57,12 @@ fun SettingsScreen(
     isDefault: Boolean,
     hasPermission: Boolean,
     bubbleBlue: Boolean,
-    notifications: Boolean,
-    previews: Boolean,
     onBack: () -> Unit,
     onMakeDefault: () -> Unit,
     onGrant: () -> Unit,
     onAppSettings: () -> Unit,
     onBubbleBlue: (Boolean) -> Unit,
-    onNotifications: (Boolean) -> Unit,
-    onPreviews: (Boolean) -> Unit,
     onSystemNotifications: () -> Unit,
-    notifSound: Boolean = true,
-    notifVibrate: Boolean = true,
-    notifHeadsUp: Boolean = true,
-    notifLockScreen: Boolean = true,
-    notifQuickReply: Boolean = true,
-    notifCopyCode: Boolean = true,
-    notifGroup: Boolean = true,
-    onNotifSound: (Boolean) -> Unit = {},
-    onNotifVibrate: (Boolean) -> Unit = {},
-    onNotifHeadsUp: (Boolean) -> Unit = {},
-    onNotifLockScreen: (Boolean) -> Unit = {},
-    onNotifQuickReply: (Boolean) -> Unit = {},
-    onNotifCopyCode: (Boolean) -> Unit = {},
-    onNotifGroup: (Boolean) -> Unit = {},
     sims: List<SimInfo> = emptyList(),
     defaultSub: Int = -1,
     onDefaultSub: (Int) -> Unit = {},
@@ -250,23 +232,8 @@ fun SettingsScreen(
                 }
             }
 
-            Section(stringResource(R.string.notifications)) {
-                SettingRow(stringResource(R.string.allow_notifications)) { IosSwitch(notifications, onNotifications) }
-                SettingRow(stringResource(R.string.show_previews)) { IosSwitch(previews, onPreviews) }
-                SettingRow(stringResource(R.string.show_lock_screen)) { IosSwitch(notifLockScreen, onNotifLockScreen) }
-                SettingRow(stringResource(R.string.pop_up)) { IosSwitch(notifHeadsUp, onNotifHeadsUp) }
-                SettingRow(stringResource(R.string.sound)) { IosSwitch(notifSound, onNotifSound) }
-                SettingRow(stringResource(R.string.vibration)) { IosSwitch(notifVibrate, onNotifVibrate) }
-                SettingRow(stringResource(R.string.quick_reply)) { IosSwitch(notifQuickReply, onNotifQuickReply) }
-                SettingRow(stringResource(R.string.copy_code_button)) { IosSwitch(notifCopyCode, onNotifCopyCode) }
-                SettingRow(stringResource(R.string.group_notifications)) { IosSwitch(notifGroup, onNotifGroup) }
-                SettingRow(stringResource(R.string.sound_system_settings), last = true, onClick = onSystemNotifications) {
-                    ChevronRight(p.tertiary)
-                }
-            }
-
-            NotificationLookSection()
-            NotificationSoundSection()
+            SystemNotificationsSection(onSystemNotifications)
+            PerformanceSection()
             PrivacySecuritySection()
 
             Section(stringResource(R.string.backup_title), stringResource(R.string.backup_desc)) {

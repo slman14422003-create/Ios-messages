@@ -62,16 +62,6 @@
     <string name="green_sms">أخضر (SMS)</string>
     <string name="blue_imessage">أزرق (iMessage)</string>
     <string name="notifications">الإشعارات</string>
-    <string name="allow_notifications">السماح بالإشعارات</string>
-    <string name="show_previews">إظهار المعاينة</string>
-    <string name="show_lock_screen">إظهار في شاشة القفل</string>
-    <string name="pop_up">إشعار منبثق</string>
-    <string name="sound">الصوت</string>
-    <string name="vibration">الاهتزاز</string>
-    <string name="quick_reply">الرد السريع</string>
-    <string name="copy_code_button">زر نسخ الكود</string>
-    <string name="group_notifications">تجميع الإشعارات</string>
-    <string name="sound_system_settings">الصوت وإعدادات النظام</string>
     <string name="permissions">الأذونات</string>
     <string name="sms_contacts_access">الوصول إلى الرسائل وجهات الاتصال</string>
     <string name="allowed">مسموح</string>
@@ -168,20 +158,6 @@
     <string name="search_count">%1$d من %2$d</string>
 
     <!-- شكل الإشعارات -->
-    <string name="notif_style">شكل الإشعارات</string>
-    <string name="notif_style_footer">يظهر البانر أثناء فتح التطبيق في نافذة مستقلة ببلور خاص به (منفصل عن بلور التطبيق). أندرويد لا يسمح للتطبيقات بتغيير لون شريط الإشعارات الخاص بالنظام، لذلك خارج التطبيق يُطبَّق لون التمييز فقط.</string>
-    <string name="banner_in_app">بانر داخل التطبيق</string>
-    <string name="notif_color">لون البانر</string>
-    <string name="notif_opacity">الشفافية</string>
-    <string name="anim_none">بدون حركة</string>
-    <string name="anim_slide">انزلاق من الأعلى</string>
-    <string name="anim_pop">ظهور منبثق</string>
-    <string name="anim_fade">تلاشي</string>
-    <string name="anim_bounce">ارتداد</string>
-    <string name="notif_preview">معاينة</string>
-    <string name="notif_preview_play">تشغيل</string>
-    <string name="notif_preview_title">الرسائل</string>
-    <string name="notif_preview_body">هكذا ستظهر الرسالة الجديدة.</string>
     <!-- الخصوصية والأمان -->
     <string name="privacy_security">الخصوصية والأمان</string>
     <string name="privacy_footer">كل شيء يبقى على هذا الهاتف. منع لقطة الشاشة يخفي التطبيق أيضاً في شاشة التطبيقات الأخيرة ويُعطّل خلفية التمويه خلف القوائم.</string>
@@ -197,21 +173,15 @@
     <string name="locked_exit">إغلاق</string>
 
     <!-- الأصوات والموثوقية -->
-    <string name="sounds_title">الأصوات</string>
-    <string name="sounds_footer">نغمات بأسلوب الآيفون موجودة داخل التطبيق (res/raw/msg_received.wav و msg_sent.wav). استبدل الملفين بملفاتك لاستخدام أصواتك.</string>
-    <string name="tone_ios">نغمة بأسلوب الآيفون</string>
-    <string name="tone_system">افتراضي الهاتف</string>
     <string name="sent_sound">صوت الإرسال</string>
-    <string name="vib_title">نمط الاهتزاز</string>
-    <string name="vib_default">افتراضي</string>
-    <string name="vib_double">نقرتان</string>
-    <string name="vib_long">طويل</string>
-    <string name="reliability_title">وصول دائم</string>
-    <string name="reliability_footer">الرسائل تصل حتى لو كان التطبيق مغلقاً. أندرويد لا يسمح بتجاوز عدم الإزعاج إلا بعد موافقتك في الشاشة التي تُفتح؛ اجعل التطبيق «غير مقيّد» في البطارية كي لا يتأخر وصول الإشعارات.</string>
-    <string name="bypass_dnd">تجاوز عدم الإزعاج</string>
-    <string name="battery_unrestricted">البطارية: بدون قيود</string>
-    <string name="show_sim_label">إظهار اسم الشريحة</string>
-    <string name="notif_blur">بلور البانر</string>
-    <string name="banner_overlay">بانر عند إغلاق التطبيق</string>
     <string name="smooth_mode">الوضع السلس (بدون blur حي)</string>
+    <string name="notifications_system">إعدادات الإشعارات</string>
+    <string name="notifications_system_footer">الصوت والنافذة المنبثقة والاهتزاز وشاشة القفل وعدم الإزعاج كلها يتحكم فيها نظام أندرويد. اضغط لفتح صفحة النظام الخاصة بالتطبيق.</string>
+    <string name="performance_title">الأداء</string>
+    <string name="snippet_photo">صورة</string>
+    <string name="snippet_attachment">مرفق</string>
+    <string name="crash_title">أُغلق التطبيق بشكل غير متوقع في المرة السابقة</string>
+    <string name="crash_hint">انسخ هذا التقرير لمشاركته مع المطوّر:</string>
+    <string name="crash_copy">نسخ</string>
+    <string name="crash_retry">حاول فتح التطبيق</string>
 </resources>
