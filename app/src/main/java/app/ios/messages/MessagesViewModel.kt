@@ -3,6 +3,7 @@ package app.ios.messages
 import android.app.Application
 import android.database.ContentObserver
 import android.net.Uri
+import android.provider.ContactsContract
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -62,14 +63,12 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     private val _bubbleBlue = MutableStateFlow(prefs.bubbleBlue)
     val bubbleBlue: StateFlow<Boolean> = _bubbleBlue
 
-    private val _notifications = MutableStateFlow(prefs.notifications)
-    val notifications: StateFlow<Boolean> = _notifications
-
-    private val _previews = MutableStateFlow(prefs.previews)
-    val previews: StateFlow<Boolean> = _previews
-
     private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
     val contacts: StateFlow<List<Contact>> = _contacts
+
+    /** Bumped every time the address book changed and the names were reloaded: screens re-read names when it moves. */
+    private val _contactsVersion = MutableStateFlow(0)
+    val contactsVersion: StateFlow<Int> = _contactsVersion
 
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations
@@ -106,20 +105,31 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Fires for any edit in any contacts app (Google, Samsung, Xiaomi...): they all write to the same provider. */
+    private val contactsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            contactsDirty = true
+            refresh(debounce = true)
+        }
+    }
+
+    @Volatile private var contactsDirty = true
+    @Volatile private var versionPending = false
+    private var contactsStamp = ""
+
     init {
         Notifier.ensureChannels(app)
         app.contentResolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
+        app.contentResolver.registerContentObserver(ContactsContract.AUTHORITY_URI, true, contactsObserver)
         refresh()
-        loadContacts()
         loadTrash()
         applyRetention()
     }
 
+    /** Re-reads the address book and every displayed name on the next refresh. */
     fun loadContacts() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val list = try { repo.contacts() } catch (e: Exception) { emptyList() }
-            _contacts.value = list
-        }
+        contactsDirty = true
+        refresh()
     }
 
     fun togglePin(threadId: Long) {
@@ -140,39 +150,6 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         _bubbleBlue.value = v
         prefs.bubbleBlue = v
     }
-
-    fun setNotifications(v: Boolean) {
-        _notifications.value = v
-        prefs.notifications = v
-    }
-
-    fun setPreviews(v: Boolean) {
-        _previews.value = v
-        prefs.previews = v
-    }
-
-    private val _notifSound = MutableStateFlow(prefs.notifSound)
-    val notifSound: StateFlow<Boolean> = _notifSound
-    private val _notifVibrate = MutableStateFlow(prefs.notifVibrate)
-    val notifVibrate: StateFlow<Boolean> = _notifVibrate
-    private val _notifHeadsUp = MutableStateFlow(prefs.notifHeadsUp)
-    val notifHeadsUp: StateFlow<Boolean> = _notifHeadsUp
-    private val _notifLockScreen = MutableStateFlow(prefs.notifLockScreen)
-    val notifLockScreen: StateFlow<Boolean> = _notifLockScreen
-    private val _notifQuickReply = MutableStateFlow(prefs.notifQuickReply)
-    val notifQuickReply: StateFlow<Boolean> = _notifQuickReply
-    private val _notifCopyCode = MutableStateFlow(prefs.notifCopyCode)
-    val notifCopyCode: StateFlow<Boolean> = _notifCopyCode
-    private val _notifGroup = MutableStateFlow(prefs.notifGroup)
-    val notifGroup: StateFlow<Boolean> = _notifGroup
-
-    fun setNotifSound(v: Boolean) { _notifSound.value = v; prefs.notifSound = v }
-    fun setNotifVibrate(v: Boolean) { _notifVibrate.value = v; prefs.notifVibrate = v }
-    fun setNotifHeadsUp(v: Boolean) { _notifHeadsUp.value = v; prefs.notifHeadsUp = v }
-    fun setNotifLockScreen(v: Boolean) { _notifLockScreen.value = v; prefs.notifLockScreen = v }
-    fun setNotifQuickReply(v: Boolean) { _notifQuickReply.value = v; prefs.notifQuickReply = v }
-    fun setNotifCopyCode(v: Boolean) { _notifCopyCode.value = v; prefs.notifCopyCode = v }
-    fun setNotifGroup(v: Boolean) { _notifGroup.value = v; prefs.notifGroup = v }
 
     fun markRead(ids: List<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -215,11 +192,25 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun refresh(debounce: Boolean = false) {
+    fun refresh(debounce: Boolean = false, checkContacts: Boolean = false) {
         job?.cancel()
         job = viewModelScope.launch(Dispatchers.IO) {
             if (debounce) delay(300)
             try {
+                // The address book may have changed while the app was away (or the change event was missed).
+                if (checkContacts) {
+                    val st = repo.contactsStamp()
+                    if (st != contactsStamp) {
+                        contactsStamp = st
+                        contactsDirty = true
+                    }
+                }
+                if (contactsDirty) {
+                    contactsDirty = false
+                    versionPending = true
+                    repo.clearCache()
+                    _contacts.value = try { repo.contacts() } catch (e: Exception) { emptyList() }
+                }
                 _hasPermission.value = repo.canRead()
                 _isDefault.value = repo.isDefault()
                 val now = System.currentTimeMillis()
@@ -227,18 +218,22 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
                     _sims.value = Sims.list(getApplication())
                     simsAt = now
                 }
+                // One pass over the stored drafts (each one is decrypted), not one lookup per conversation.
+                val drafts = prefs.allDrafts()
+                val draftByKey = HashMap<String, String>(drafts.size)
+                drafts.forEach { (a, t, _) -> draftByKey[prefs.key(a)] = t }
                 val base = repo.conversations().map { c ->
-                    val d = prefs.draft(c.address)
-                    if (d.isBlank()) c else c.copy(draft = d)
+                    val d = draftByKey[prefs.key(c.address)]
+                    if (d.isNullOrBlank()) c else c.copy(draft = d)
                 }
                 val keys = base.map { prefs.key(it.address) }.toSet()
-                val extra = prefs.allDrafts()
+                val extra = drafts
                     .filter { prefs.key(it.first) !in keys }
                     .map { (a, t, time) ->
                         Conversation(
                             -(Math.abs(prefs.key(a).hashCode()).toLong()) - 1L, a,
                             repo.contactName(a) ?: a, "", if (time > 0L) time else System.currentTimeMillis(),
-                            0, repo.contactName(a) != null, t
+                            0, repo.contactName(a) != null, t, photo = repo.contactPhoto(a)
                         )
                     }
                 val list = if (extra.isEmpty()) base else (base + extra).sortedByDescending { it.date }
@@ -250,6 +245,10 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
                     ensureActive()
                     _messages.value = m
                     if (m.any { !it.mine && !it.read }) repo.markRead(tid)
+                }
+                if (versionPending) {
+                    versionPending = false
+                    _contactsVersion.value = _contactsVersion.value + 1
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -280,13 +279,14 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     fun onPermissionsChanged() {
         _hasPermission.value = repo.canRead()
         _isDefault.value = repo.isDefault()
-        repo.clearCache()
         loadContacts()
-        refresh()
     }
 
     /** Cache hit in the normal case; a miss is one indexed lookup (the cache lock is no longer held during queries). */
-    fun nameFor(address: String): String = repo.cachedName(address) ?: repo.contactName(address) ?: address
+    fun nameFor(address: String): String = repo.cachedName(address) ?: repo.quickName(address) ?: address
+
+    /** Contact photo thumbnail URI for an address, or null. Cache only: safe while composing. */
+    fun photoFor(address: String): String? = repo.cachedPhoto(address)
 
     fun openChat(threadId: Long?, address: String?) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -460,6 +460,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        getApplication<Application>().contentResolver.unregisterContentObserver(observer)
+        val cr = getApplication<Application>().contentResolver
+        cr.unregisterContentObserver(observer)
+        cr.unregisterContentObserver(contactsObserver)
     }
 }

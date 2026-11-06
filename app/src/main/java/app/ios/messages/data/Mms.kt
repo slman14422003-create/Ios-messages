@@ -433,7 +433,11 @@ object Mms {
             val text = r.parts.firstOrNull { it.type.startsWith("text/plain") }
                 ?.let { String(it.data, Charsets.UTF_8).trim() }
             val hasImage = r.parts.any { it.type.startsWith("image/") }
-            return addr to (if (!text.isNullOrBlank()) text else if (hasImage) "Photo" else "Attachment")
+            val lc = app.ios.messages.Lang.wrap(ctx)
+            return addr to (
+                if (!text.isNullOrBlank()) text
+                else lc.getString(if (hasImage) app.ios.messages.R.string.snippet_photo else app.ios.messages.R.string.snippet_attachment)
+            )
         } finally {
             f.delete()
         }

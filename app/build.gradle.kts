@@ -13,8 +13,8 @@ android {
         applicationId = "app.ios.messages"
         minSdk = 31
         targetSdk = 36
-        versionCode = 23
-        versionName = "3.3"
+        versionCode = 24
+        versionName = "3.4"
         // SHA-256 of the release signing certificate. At start-up the app compares it with the
         // certificate it is actually signed with; a re-signed / re-packaged copy locks itself.
         // If you ever change release.jks, update this value (keytool -list -v -keystore release.jks).

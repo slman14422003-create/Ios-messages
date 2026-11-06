@@ -78,11 +78,10 @@ import app.ios.messages.ui.rtlSign
 import app.ios.messages.data.Prefs
 import app.ios.messages.security.Integrity
 import app.ios.messages.security.applyScreenSecure
-import app.ios.messages.ui.InAppBannerHost
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
-data class ChatTarget(val threadId: Long?, val address: String?, val name: String?) : Parcelable
+data class ChatTarget(val threadId: Long?, val address: String?, val name: String?, val photo: String? = null) : Parcelable
 
 class MainActivity : ComponentActivity() {
 
@@ -179,7 +178,7 @@ class MainActivity : ComponentActivity() {
         AppState.foreground = true
         requestHighRefresh()
         vm.recheckRole()
-        vm.refresh()
+        vm.refresh(checkContacts = true)
     }
 
     /** Ask the display for its highest refresh rate at the current resolution (90 / 120 Hz panels). */
@@ -281,6 +280,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     val muted by vm.muted.collectAsStateWithLifecycle()
     val trash by vm.trash.collectAsStateWithLifecycle()
     val contacts by vm.contacts.collectAsStateWithLifecycle()
+    val contactsVersion by vm.contactsVersion.collectAsStateWithLifecycle()
     val sims by vm.sims.collectAsStateWithLifecycle()
     val setupDismissed by vm.setupDismissed.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -325,6 +325,9 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         )
     }
     val settingsVisible by remember { derivedStateOf { settingsProgress.value > 0.001f } }
+
+    // Photos are cached by URI, so drop them whenever the address book changed.
+    LaunchedEffect(contactsVersion) { if (contactsVersion > 0) app.ios.messages.ui.PhotoCache.invalidate() }
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -432,8 +435,19 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                             onPick = { addr, name -> chat = ChatTarget(null, addr, name ?: vm.nameFor(addr)) }
                         )
                     } else {
+                        // Name and photo follow the address book live: edit the contact anywhere and the header updates.
+                        val liveTarget = remember(t, conversations, contactsVersion) {
+                            val key = t.address?.let { Prefs.keyOf(it) }
+                            val c = conversations.firstOrNull {
+                                (t.threadId != null && it.threadId == t.threadId) || (key != null && Prefs.keyOf(it.address) == key)
+                            }
+                            t.copy(
+                                name = c?.name ?: t.address?.let { vm.nameFor(it) } ?: t.name,
+                                photo = c?.photo ?: t.address?.let { vm.photoFor(it) }
+                            )
+                        }
                         ChatScreen(
-                            target = t,
+                            target = liveTarget,
                             messages = messages,
                             isDefault = isDefault,
                             sims = sims,
@@ -463,15 +477,6 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             // Collected only while the settings screen exists, so toggling a preference no longer
             // recomposes the whole app root.
             val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
-            val notifications by vm.notifications.collectAsStateWithLifecycle()
-            val previews by vm.previews.collectAsStateWithLifecycle()
-            val notifSound by vm.notifSound.collectAsStateWithLifecycle()
-            val notifVibrate by vm.notifVibrate.collectAsStateWithLifecycle()
-            val notifHeadsUp by vm.notifHeadsUp.collectAsStateWithLifecycle()
-            val notifLockScreen by vm.notifLockScreen.collectAsStateWithLifecycle()
-            val notifQuickReply by vm.notifQuickReply.collectAsStateWithLifecycle()
-            val notifCopyCode by vm.notifCopyCode.collectAsStateWithLifecycle()
-            val notifGroup by vm.notifGroup.collectAsStateWithLifecycle()
             val defaultSub by vm.defaultSub.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = settingsProgress.value * 0.25f) })
             Box(
@@ -484,8 +489,6 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                     isDefault = isDefault,
                     hasPermission = hasPermission,
                     bubbleBlue = bubbleBlue,
-                    notifications = notifications,
-                    previews = previews,
                     onBack = { settingsOpen = false },
                     onMakeDefault = {
                         val rm = ctx.getSystemService(RoleManager::class.java)
@@ -500,26 +503,10 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                         )
                     },
                     onBubbleBlue = vm::setBubbleBlue,
-                    onNotifications = vm::setNotifications,
-                    onPreviews = vm::setPreviews,
                     onSystemNotifications = {
                         Notifier.ensureChannels(ctx)
-                        ctx.startActivity(Notifier.channelSettingsIntent(ctx))
+                        runCatching { ctx.startActivity(Notifier.systemSettingsIntent(ctx)) }
                     },
-                    notifSound = notifSound,
-                    notifVibrate = notifVibrate,
-                    notifHeadsUp = notifHeadsUp,
-                    notifLockScreen = notifLockScreen,
-                    notifQuickReply = notifQuickReply,
-                    notifCopyCode = notifCopyCode,
-                    notifGroup = notifGroup,
-                    onNotifSound = vm::setNotifSound,
-                    onNotifVibrate = vm::setNotifVibrate,
-                    onNotifHeadsUp = vm::setNotifHeadsUp,
-                    onNotifLockScreen = vm::setNotifLockScreen,
-                    onNotifQuickReply = vm::setNotifQuickReply,
-                    onNotifCopyCode = vm::setNotifCopyCode,
-                    onNotifGroup = vm::setNotifGroup,
                     sims = sims,
                     defaultSub = defaultSub,
                     onDefaultSub = vm::setDefaultSub,
@@ -543,16 +530,6 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 modifier = Modifier.align(Alignment.CenterStart)
             )
         }
-
-        InAppBannerHost(
-            onOpen = { addr ->
-                if (addr.isNotBlank()) {
-                    settingsOpen = false
-                    chat = ChatTarget(null, addr, vm.nameFor(addr))
-                }
-            },
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
 
         EdgeSwipeBack(
             progress = progress,
@@ -644,13 +621,13 @@ private fun CrashScreen(trace: String, onContinue: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     MaterialTheme {
         Column(Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(16.dp)) {
-            Text("The app crashed last time", fontSize = 20.sp, color = Color.Black)
-            Text("Copy this text and send it to Claude:", fontSize = 14.sp, color = Color.DarkGray)
+            Text(androidx.compose.ui.res.stringResource(R.string.crash_title), fontSize = 20.sp, color = Color.Black)
+            Text(androidx.compose.ui.res.stringResource(R.string.crash_hint), fontSize = 14.sp, color = Color.DarkGray)
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                 SelectionContainer { Text(trace, fontSize = 10.sp, color = Color.Black) }
             }
-            Button(onClick = { clipboard.setText(AnnotatedString(trace)) }) { Text("Copy") }
-            Button(onClick = onContinue) { Text("Try opening the app") }
+            Button(onClick = { clipboard.setText(AnnotatedString(trace)) }) { Text(androidx.compose.ui.res.stringResource(R.string.crash_copy)) }
+            Button(onClick = onContinue) { Text(androidx.compose.ui.res.stringResource(R.string.crash_retry)) }
         }
     }
 }

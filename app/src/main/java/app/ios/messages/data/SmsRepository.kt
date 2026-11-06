@@ -17,8 +17,13 @@ import android.telephony.SmsManager
 class SmsRepository(private val ctx: Context) {
 
     private val cr get() = ctx.contentResolver
+    private val attachmentLabel: String by lazy { app.ios.messages.Lang.wrap(ctx).getString(app.ios.messages.R.string.snippet_attachment) }
     private val smsUri: Uri = Uri.parse("content://sms")
-    private val nameCache = HashMap<String, String?>()
+    private class CInfo(val name: String?, val photo: String?, val at: Long)
+
+    /** address -> contact info. Entries expire, so an edit made in any contacts app shows up even without a change event. */
+    private val nameCache = HashMap<String, CInfo>()
+    private var phoneIndex: Map<String, CInfo>? = null
 
     private fun has(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
@@ -30,26 +35,100 @@ class SmsRepository(private val ctx: Context) {
         }.getOrDefault(false)
         return role || Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
     }
-    fun clearCache() = synchronized(nameCache) { nameCache.clear() }
+    fun clearCache() = synchronized(nameCache) { nameCache.clear(); phoneIndex = null }
+
+    private fun fresh(i: CInfo, now: Long) = now - i.at < (if (i.name != null) HIT_TTL else MISS_TTL)
 
     /** Cache-only lookup: safe on the main thread. Returns null when the name is unknown or not loaded yet. */
-    fun cachedName(address: String): String? = synchronized(nameCache) { nameCache[address] }
+    fun cachedName(address: String): String? = synchronized(nameCache) {
+        nameCache[address]?.takeIf { fresh(it, System.currentTimeMillis()) }?.name
+    }
 
-    fun contactName(address: String): String? {
-        synchronized(nameCache) { if (nameCache.containsKey(address)) return nameCache[address] }
-        var result: String? = null
+    fun cachedPhoto(address: String): String? = synchronized(nameCache) {
+        nameCache[address]?.takeIf { fresh(it, System.currentTimeMillis()) }?.photo
+    }
+
+    fun contactName(address: String): String? = info(address, true).name
+
+    fun contactPhoto(address: String): String? = info(address, true).photo
+
+    /**
+     * Looks the number up through the system PhoneLookup (works with Google, Samsung, Xiaomi and any other
+     * contacts app, because they all write to the same Contacts Provider). When the provider cannot match the
+     * number (different country format, spaces, a leading 0), the last 9 digits are compared against the
+     * address book as a second chance. [useIndex] = false keeps it to one quick query (main-thread safe).
+     */
+    private fun info(address: String, useIndex: Boolean): CInfo {
+        val now = System.currentTimeMillis()
+        synchronized(nameCache) {
+            nameCache[address]?.let { if (fresh(it, now)) return it }
+        }
+        var name: String? = null
+        var photo: String? = null
         if (has(Manifest.permission.READ_CONTACTS) && address.any { it.isDigit() }) {
             try {
                 val uri = Uri.withAppendedPath(
                     ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(address)
                 )
-                cr.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)
-                    ?.use { if (it.moveToFirst()) result = it.getString(0) }
+                cr.query(
+                    uri,
+                    arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.PHOTO_THUMBNAIL_URI),
+                    null, null, null
+                )?.use {
+                    if (it.moveToFirst()) {
+                        name = it.getString(0)
+                        photo = it.getString(1)
+                    }
+                }
             } catch (_: Exception) {
             }
+            if (name == null && useIndex) {
+                val hit = index()[Prefs.keyOf(address)]
+                if (hit != null) {
+                    name = hit.name
+                    photo = hit.photo
+                }
+            }
         }
-        synchronized(nameCache) { nameCache[address] = result }
-        return result
+        val out = CInfo(name?.takeIf { it.isNotBlank() }, photo, now)
+        // A miss found without the fallback index is not remembered: the full lookup may still find it.
+        if (out.name != null || useIndex) synchronized(nameCache) { nameCache[address] = out }
+        return out
+    }
+
+    private fun index(): Map<String, CInfo> {
+        synchronized(nameCache) { phoneIndex?.let { return it } }
+        val m = HashMap<String, CInfo>()
+        val now = System.currentTimeMillis()
+        for (c in contacts()) {
+            val d = c.number.filter { it.isDigit() }
+            if (d.length >= 7) m.putIfAbsent(d.takeLast(9), CInfo(c.name, c.photo, now))
+        }
+        synchronized(nameCache) { phoneIndex = m }
+        return m
+    }
+
+    /** Main-thread friendly: cache hit, else one indexed query. */
+    fun quickName(address: String): String? = info(address, false).name
+
+    /** Cheap fingerprint of the address book (newest change + size). Differs after any add / edit / delete. */
+    fun contactsStamp(): String {
+        if (!has(Manifest.permission.READ_CONTACTS)) return ""
+        return try {
+            var newest = 0L
+            var count = 0
+            cr.query(
+                ContactsContract.Contacts.CONTENT_URI,
+                arrayOf(ContactsContract.Contacts._ID, ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP),
+                null, null, null
+            )?.use { c ->
+                count = c.count
+                while (c.moveToNext()) newest = maxOf(newest, c.getLong(1))
+            }
+            "$newest:$count"
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     fun conversations(): List<Conversation> {
@@ -117,8 +196,9 @@ class SmsRepository(private val ctx: Context) {
                 if (list.isEmpty()) continue
                 out += Conversation(
                     tid, list[0], list.joinToString(", ") { contactName(it) ?: it },
-                    (c.getString(3) ?: "").ifBlank { "Attachment" }, c.getLong(1), unread[tid] ?: 0,
-                    contactName(list[0]) != null
+                    (c.getString(3) ?: "").ifBlank { attachmentLabel }, c.getLong(1), unread[tid] ?: 0,
+                    contactName(list[0]) != null,
+                    photo = if (list.size == 1) contactPhoto(list[0]) else null
                 )
             }
         }
@@ -149,7 +229,8 @@ class SmsRepository(private val ctx: Context) {
                     map[tid] = Conversation(
                         tid, addr, contactName(addr) ?: addr,
                         c.getString(iB) ?: "", c.getLong(iD), 0,
-                        contactName(addr) != null
+                        contactName(addr) != null,
+                        photo = contactPhoto(addr)
                     )
                 }
             }
@@ -164,14 +245,14 @@ class SmsRepository(private val ctx: Context) {
         try {
             cr.query(
                 Phone.CONTENT_URI,
-                arrayOf(Phone.CONTACT_ID, Phone.DISPLAY_NAME, Phone.NUMBER),
+                arrayOf(Phone.CONTACT_ID, Phone.DISPLAY_NAME, Phone.NUMBER, Phone.PHOTO_THUMBNAIL_URI),
                 null, null, Phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC"
             )?.use { c ->
                 while (c.moveToNext()) {
                     val name = c.getString(1) ?: continue
                     val num = c.getString(2) ?: continue
                     val key = c.getLong(0).toString() + "|" + num.filter { it.isDigit() }.takeLast(9)
-                    if (seen.add(key)) out += Contact(c.getLong(0), name, num.trim())
+                    if (seen.add(key)) out += Contact(c.getLong(0), name, num.trim(), c.getString(3))
                 }
             }
         } catch (_: Exception) {
@@ -394,6 +475,8 @@ class SmsRepository(private val ctx: Context) {
     }
 
     companion object {
+        private const val HIT_TTL = 10 * 60_000L
+        private const val MISS_TTL = 60_000L
         const val TYPE_INBOX = 1
         const val TYPE_SENT = 2
         const val TYPE_OUTBOX = 4

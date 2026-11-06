@@ -9,7 +9,9 @@ data class Conversation(
     val unread: Int,
     val known: Boolean = true,
     val draft: String? = null,
-    val subId: Int = -1
+    val subId: Int = -1,
+    /** Thumbnail URI of the contact photo (null for unknown numbers and groups). */
+    val photo: String? = null
 )
 
 data class Message(
@@ -27,5 +29,6 @@ data class Message(
 data class Contact(
     val id: Long,
     val name: String,
-    val number: String
+    val number: String,
+    val photo: String? = null
 )

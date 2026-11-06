@@ -412,7 +412,7 @@ private fun ChatScreenBody(
                         Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 8.dp),
                         onClick = { kbc?.hide(); onBack() }
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
-                    if (menu) ContactSheet(name, address, { searchOpen = true; searchQuery = ""; searchPos = 0 }) { menu = false }
+                    if (menu) ContactSheet(name, address, target.photo, { searchOpen = true; searchQuery = ""; searchPos = 0 }) { menu = false }
                     Column(
                         Modifier
                             .align(Alignment.TopCenter)
@@ -422,7 +422,7 @@ private fun ChatScreenBody(
                             .padding(horizontal = 18.dp, vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Avatar(name, 58.dp)
+                        Avatar(name, 58.dp, target.photo)
                         Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -1090,7 +1090,7 @@ private fun lastLocationLink(ctx: android.content.Context): String? {
 
 
 @Composable
-private fun ContactSheet(name: String, address: String, onSearch: () -> Unit, onDismiss: () -> Unit) {
+private fun ContactSheet(name: String, address: String, photo: String?, onSearch: () -> Unit, onDismiss: () -> Unit) {
     val p = LocalPalette.current
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -1101,7 +1101,7 @@ private fun ContactSheet(name: String, address: String, onSearch: () -> Unit, on
         title = name,
         message = if (name != address) address else null,
         header = {
-            Avatar(name, 76.dp)
+            Avatar(name, 76.dp, photo)
             Spacer(Modifier.height(10.dp))
         },
         actions = listOf(AlertAction(stringResource(R.string.contact_done), bold = true, onClick = onDismiss)),

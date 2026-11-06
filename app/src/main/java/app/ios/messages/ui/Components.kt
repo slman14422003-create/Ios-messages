@@ -66,6 +66,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -199,11 +200,39 @@ private fun initialsOf(name: String): String =
         .take(2)
         .joinToString("") { it.first().uppercase() }
 
-/** iOS-style contact avatar: gray gradient + initials, or silhouette for unknown numbers. */
+/** Small in-memory cache for contact photo thumbnails. [generation] moves when the address book changed. */
+object PhotoCache {
+    var generation by androidx.compose.runtime.mutableIntStateOf(0)
+        private set
+    private val cache = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(96) {}
+
+    fun invalidate() {
+        cache.evictAll()
+        generation++
+    }
+
+    fun load(ctx: android.content.Context, uri: String): androidx.compose.ui.graphics.ImageBitmap? {
+        cache.get(uri)?.let { return it }
+        return try {
+            ctx.contentResolver.openInputStream(android.net.Uri.parse(uri))?.use { ins ->
+                android.graphics.BitmapFactory.decodeStream(ins)?.asImageBitmap()
+            }?.also { cache.put(uri, it) }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+}
+
+/** iOS-style contact avatar: the contact's photo when there is one, else gray gradient + initials, or a silhouette for unknown numbers. */
 @Composable
-fun Avatar(name: String, size: Dp) {
+fun Avatar(name: String, size: Dp, photo: String? = null) {
     val p = LocalPalette.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val initials = remember(name) { initialsOf(name) }
+    val gen = PhotoCache.generation
+    val bitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, photo, gen) {
+        value = if (photo == null) null else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PhotoCache.load(ctx, photo) }
+    }
     Box(
         Modifier
             .size(size)
@@ -211,7 +240,15 @@ fun Avatar(name: String, size: Dp) {
             .background(Brush.verticalGradient(listOf(p.avatarTop, p.avatarBottom))),
         contentAlignment = Alignment.Center
     ) {
-        if (initials.isNotEmpty()) {
+        val bmp = bitmap
+        if (bmp != null) {
+            androidx.compose.foundation.Image(
+                bitmap = bmp,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else if (initials.isNotEmpty()) {
             Text(
                 initials,
                 color = Color.White,

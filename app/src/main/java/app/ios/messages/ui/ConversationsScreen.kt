@@ -598,7 +598,7 @@ private fun PinTile(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box {
-            Avatar(c.name, 76.dp)
+            Avatar(c.name, 76.dp, c.photo)
             if (c.unread > 0) {
                 Box(
                     Modifier
@@ -718,7 +718,7 @@ private fun ConversationRow(
                 if (selecting) SelectCircle(selected)
                 else if (c.unread > 0) Box(Modifier.size(10.dp).clip(CircleShape).background(p.blue))
             }
-            Avatar(c.name, 50.dp)
+            Avatar(c.name, 50.dp, c.photo)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {

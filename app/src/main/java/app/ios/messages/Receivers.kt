@@ -126,9 +126,36 @@ class MmsDownloadedReceiver : BroadcastReceiver() {
     }
 }
 
-/** Required by the default-SMS-app role ("respond via message" from the dialer). */
+/**
+ * Required by the default-SMS-app role: "respond via message" (for example declining a call with a text from
+ * the dialer). It used to be an empty stub, so those quick replies were silently dropped.
+ */
 class HeadlessSmsSendService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val i = intent
+        val to = i?.data?.schemeSpecificPart?.substringBefore('?')?.trim().orEmpty()
+        val text = i?.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        if (i == null || to.isEmpty() || text.isEmpty() ||
+            i.action != android.telephony.TelephonyManager.ACTION_RESPOND_VIA_MESSAGE
+        ) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        val app = applicationContext
+        val sub = subIdOf(i)
+        Thread {
+            try {
+                SmsRepository(app).send(to, text, sub)
+            } catch (e: Throwable) {
+                android.util.Log.e("IosMessages", "respond via message failed", e)
+            } finally {
+                stopSelf(startId)
+            }
+        }.start()
+        return START_NOT_STICKY
+    }
 }
 
 /** Radio answered for an outgoing SMS: flip the outbox row to sent / failed. */

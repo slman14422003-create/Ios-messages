@@ -4,14 +4,14 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
-import android.media.RingtoneManager
 import android.media.SoundPool
 import android.net.Uri
 import app.ios.messages.data.Prefs
 
 /**
- * Message sounds. Tone 0 plays the bundled iPhone-style sounds from res/raw (msg_received / msg_sent):
- * drop your own files with the same names there to replace them. Tone 1 uses the phone's default.
+ * Bundled iPhone-style sounds from res/raw (msg_received / msg_sent): drop your own files with the same names
+ * there to replace them. msg_received is only the starting sound of the notification channel (after that the
+ * sound is whatever the user picks in Android's notification settings); msg_sent plays when a message is sent.
  */
 object Sounds {
     fun receivedUri(ctx: Context): Uri =
@@ -42,7 +42,7 @@ object Sounds {
             if (status == 0) synchronized(this) { ready += sampleId }
         }
         val app = ctx.applicationContext
-        for (res in intArrayOf(R.raw.msg_received, R.raw.msg_sent)) {
+        for (res in intArrayOf(R.raw.msg_sent)) {
             ids[res] = sp.load(app, res, 1)
         }
         pool = sp
@@ -75,16 +75,6 @@ object Sounds {
                 mp.setOnErrorListener { p, _, _ -> p.release(); true }
                 mp.start()
             }
-        }
-    }
-
-    /** Message arrived while the app is open (the system plays the channel sound otherwise). */
-    fun playReceived(ctx: Context) {
-        val prefs = Prefs(ctx)
-        if (!prefs.notifSound || !ringerNormal(ctx)) return
-        if (prefs.notifTone == 0) play(ctx, R.raw.msg_received)
-        else runCatching {
-            RingtoneManager.getRingtone(ctx, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()
         }
     }
 

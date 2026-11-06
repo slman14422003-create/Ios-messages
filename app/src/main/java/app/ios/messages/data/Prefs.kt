@@ -10,14 +10,6 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("bubble_blue", false)
         set(v) { sp.edit().putBoolean("bubble_blue", v).apply() }
 
-    var notifications: Boolean
-        get() = sp.getBoolean("notifications", true)
-        set(v) { sp.edit().putBoolean("notifications", v).apply() }
-
-    var previews: Boolean
-        get() = sp.getBoolean("previews", true)
-        set(v) { sp.edit().putBoolean("previews", v).apply() }
-
     var appearance: Int
         get() = sp.getInt("appearance", 0)
         set(v) { sp.edit().putInt("appearance", v).apply() }
@@ -34,106 +26,18 @@ class Prefs(ctx: Context) {
         get() = sp.getString("language", "system") ?: "system"
         set(v) { sp.edit().putString("language", v).apply() }
 
-    var notifSound: Boolean
-        get() = sp.getBoolean("notif_sound", true)
-        set(v) { sp.edit().putBoolean("notif_sound", v).apply() }
-
-    var notifVibrate: Boolean
-        get() = sp.getBoolean("notif_vibrate", true)
-        set(v) { sp.edit().putBoolean("notif_vibrate", v).apply() }
-
-    var notifHeadsUp: Boolean
-        get() = sp.getBoolean("notif_heads_up", true)
-        set(v) { sp.edit().putBoolean("notif_heads_up", v).apply() }
-
-    var notifLockScreen: Boolean
-        get() = sp.getBoolean("notif_lock_screen", true)
-        set(v) { sp.edit().putBoolean("notif_lock_screen", v).apply() }
-
-    var notifQuickReply: Boolean
-        get() = sp.getBoolean("notif_quick_reply", true)
-        set(v) { sp.edit().putBoolean("notif_quick_reply", v).apply() }
-
-    var notifCopyCode: Boolean
-        get() = sp.getBoolean("notif_copy_code", true)
-        set(v) { sp.edit().putBoolean("notif_copy_code", v).apply() }
-
-    var notifGroup: Boolean
-        get() = sp.getBoolean("notif_group", true)
-        set(v) { sp.edit().putBoolean("notif_group", v).apply() }
-
     var notifChannelVersion: Int
         get() = sp.getInt("notif_channel_version", 0)
         set(v) { sp.edit().putInt("notif_channel_version", v).apply() }
-
-    // ---- notification look (in-app banner + system accent) -----------------------------------
-
-    /** Show our own banner while the app is open (the system shade cannot be restyled on Android 12+). */
-    /** Also draw the banner over other apps while this app is closed (needs "Display over other apps"). */
-    var bannerOverlay: Boolean
-        get() = sp.getBoolean("banner_overlay", true)
-        set(v) { sp.edit().putBoolean("banner_overlay", v).apply() }
 
     /** Smooth mode: lists use cheap static bars instead of live blur. */
     var smoothMode: Boolean
         get() = sp.getBoolean("smooth_mode", true)
         set(v) { sp.edit().putBoolean("smooth_mode", v).apply() }
 
-    var bannerEnabled: Boolean
-        get() = sp.getBoolean("banner_enabled", true)
-        set(v) { sp.edit().putBoolean("banner_enabled", v).apply() }
-
-    /** ARGB colour of the banner / notification accent. 0 = follow the sent-bubble colour. */
-    var notifColor: Long
-        get() = sp.getLong("notif_color", 0L)
-        set(v) { sp.edit().putLong("notif_color", v).apply() }
-
-    var bannerAlpha: Float
-        get() = sp.getFloat("banner_alpha", 0.88f).coerceIn(0.3f, 1f)
-        set(v) { sp.edit().putFloat("banner_alpha", v.coerceIn(0.3f, 1f)).apply() }
-
-    /** 0 none, 1 slide, 2 pop, 3 fade, 4 bounce. */
-    /** Blur radius (dp) of the banner's own window blur. Independent from the app's glass effects. */
-    var bannerBlur: Int
-        get() = sp.getInt("banner_blur", 24).coerceIn(0, 60)
-        set(v) { sp.edit().putInt("banner_blur", v.coerceIn(0, 60)).apply() }
-
-    var bannerAnim: Int
-        get() = sp.getInt("banner_anim", 1).coerceIn(0, 4)
-        set(v) { sp.edit().putInt("banner_anim", v).apply() }
-
-    var bannerSeconds: Int
-        get() = sp.getInt("banner_seconds", 4).coerceIn(2, 10)
-        set(v) { sp.edit().putInt("banner_seconds", v).apply() }
-
-    /** 0 = bundled iPhone-style tone, 1 = the phone's default notification sound. */
-    var notifTone: Int
-        get() = sp.getInt("notif_tone", 0)
-        set(v) { sp.edit().putInt("notif_tone", v).apply() }
-
     var sentSound: Boolean
         get() = sp.getBoolean("sent_sound", true)
         set(v) { sp.edit().putBoolean("sent_sound", v).apply() }
-
-    /** 0 default, 1 double tap, 2 long. */
-    var vibPattern: Int
-        get() = sp.getInt("vib_pattern", 0)
-        set(v) { sp.edit().putInt("vib_pattern", v).apply() }
-
-    /** Ask the system to let message notifications through Do Not Disturb (needs the user's grant). */
-    var bypassDnd: Boolean
-        get() = sp.getBoolean("bypass_dnd", false)
-        set(v) { sp.edit().putBoolean("bypass_dnd", v).apply() }
-
-    var showSimLabel: Boolean
-        get() = sp.getBoolean("show_sim_label", true)
-        set(v) { sp.edit().putBoolean("show_sim_label", v).apply() }
-
-    /** The colour actually used (ARGB int). */
-    fun notifColorArgb(): Int {
-        val c = notifColor
-        return if (c != 0L) c.toInt() else if (bubbleBlue) 0xFF007AFF.toInt() else 0xFF34C759.toInt()
-    }
 
     // ---- privacy ------------------------------------------------------------------------------
 
@@ -159,9 +63,14 @@ class Prefs(ctx: Context) {
     // ---- per-conversation keys ---------------------------------------------------------------
 
     /** Same person => same key, regardless of "+966", spaces, dashes. */
-    fun key(address: String): String {
-        val d = address.filter { it.isDigit() }
-        return if (d.length >= 7) d.takeLast(9) else address.trim().lowercase()
+    fun key(address: String): String = keyOf(address)
+
+    companion object {
+        /** Process-wide version of [key] (used by the notifier and the contact cache, which have no Prefs instance). */
+        fun keyOf(address: String): String {
+            val d = address.filter { it.isDigit() }
+            return if (d.length >= 7) d.takeLast(9) else address.trim().lowercase()
+        }
     }
 
     // ---- SIM ---------------------------------------------------------------------------------

@@ -11,7 +11,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
-import android.media.RingtoneManager
 import android.net.Uri
 import android.provider.Settings
 import app.ios.messages.data.Otp
@@ -19,15 +18,27 @@ import app.ios.messages.data.Prefs
 import app.ios.messages.data.Sims
 import app.ios.messages.data.SmsRepository
 
+/**
+ * Notifications are fully owned by Android: the app creates normal channels (messages, verification codes,
+ * delivery problems) and never overrides sound, vibration, pop-up, lock-screen visibility or Do Not Disturb.
+ * Everything the user wants to change lives in the system's notification settings for this app.
+ */
 object Notifier {
     const val KEY_REPLY = "reply_text"
+    const val CH_MESSAGES = "messages_v4"
+    const val CH_CODES = "codes_v4"
     const val CH_FAILED = "failed_v3"
-    private const val CH_QUIET = "quiet_v1"
     private const val GROUP = "app.ios.messages.GROUP"
     private const val SUMMARY_ID = 0x5A11
     private const val MAX_LINES = 8
 
+    /** Conversation key -> recent lines. The key ignores "+966", spaces and dashes (same person = one notification). */
     private val history = HashMap<String, ArrayList<Pair<String, Long>>>()
+
+    @Volatile private var channelsReady = false
+
+    /** Same number written two ways must map to the same notification id. */
+    private fun nid(address: String): Int = Prefs.keyOf(address).hashCode()
 
     private fun open(ctx: Context, address: String): PendingIntent {
         val open = Intent(ctx, MainActivity::class.java).apply {
@@ -36,100 +47,68 @@ object Notifier {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         return PendingIntent.getActivity(
-            ctx, address.hashCode(), open,
+            ctx, nid(address), open,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
     }
 
     fun ensureChannels(ctx: Context): NotificationManager {
-        val lc = Lang.wrap(ctx)
         val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (channelsReady && nm.getNotificationChannel(CH_MESSAGES) != null) return nm
+        val lc = Lang.wrap(ctx)
         val prefs = Prefs(ctx)
-        if (prefs.notifChannelVersion < 3) {
-            listOf("messages", "codes", "failed", "messages_v2", "codes_v2", "failed_v2").forEach {
-                runCatching { nm.deleteNotificationChannel(it) }
+        if (prefs.notifChannelVersion < 4) {
+            // Older builds left one channel behind for every sound / vibration / pop-up combination.
+            val keep = setOf(CH_MESSAGES, CH_CODES, CH_FAILED)
+            nm.notificationChannels.forEach { ch ->
+                val legacy = ch.id.startsWith("messages") || ch.id.startsWith("codes") ||
+                    ch.id.startsWith("quiet") || ch.id.startsWith("failed")
+                if (ch.id !in keep && legacy) runCatching { nm.deleteNotificationChannel(ch.id) }
             }
-            prefs.notifChannelVersion = 3
+            prefs.notifChannelVersion = 4
         }
-        val keep = setOf(channelFor(nm, prefs, false, lc), channelFor(nm, prefs, true, lc), CH_FAILED)
-        // Every sound/vibrate/pop-up combination used to leave its own channel behind forever.
-        nm.notificationChannels.forEach { ch ->
-            if (ch.id !in keep && (ch.id.startsWith("messages_s") || ch.id.startsWith("codes_s"))) {
-                runCatching { nm.deleteNotificationChannel(ch.id) }
-            }
-        }
-        if (nm.getNotificationChannel(CH_FAILED) == null) {
-            nm.createNotificationChannel(NotificationChannel(CH_FAILED, lc.getString(R.string.ch_failed), NotificationManager.IMPORTANCE_DEFAULT).apply {
+        // createNotificationChannel on an existing channel only refreshes its name / description,
+        // which keeps them in the app language while leaving the user's own sound / vibration choices alone.
+        nm.createNotificationChannel(messageChannel(CH_MESSAGES, lc.getString(R.string.messages), lc.getString(R.string.ch_messages_desc), lc))
+        nm.createNotificationChannel(messageChannel(CH_CODES, lc.getString(R.string.ch_codes), lc.getString(R.string.ch_codes_desc), lc))
+        nm.createNotificationChannel(
+            NotificationChannel(CH_FAILED, lc.getString(R.string.ch_failed), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = lc.getString(R.string.ch_failed_desc)
                 setShowBadge(false)
-            })
-        }
+            }
+        )
+        channelsReady = true
         return nm
     }
 
-    /** Do Not Disturb override only counts once the user has actually granted policy access. */
-    private fun dndBypass(ctx: Context, prefs: Prefs): Boolean =
-        prefs.bypassDnd && ctx.getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted
-
-    private fun vibration(prefs: Prefs): LongArray = when (prefs.vibPattern) {
-        1 -> longArrayOf(0, 120, 90, 120)
-        2 -> longArrayOf(0, 600)
-        else -> longArrayOf(0, 250, 120, 250)
-    }
-
-    // Channel settings are frozen once created, so every setting that lives on the channel is part of its id.
-    fun channelId(ctx: Context, prefs: Prefs, codes: Boolean): String =
-        (if (codes) "codes" else "messages") +
-            "_s" + (if (prefs.notifSound) 1 else 0) +
-            "v" + (if (prefs.notifVibrate) 1 else 0) +
-            "h" + (if (prefs.notifHeadsUp) 1 else 0) +
-            "t" + prefs.notifTone +
-            "p" + prefs.vibPattern +
-            "d" + (if (dndBypass(ctx, prefs)) 1 else 0)
-
-    private fun channelFor(nm: NotificationManager, prefs: Prefs, codes: Boolean, lc: Context): String {
-        val id = channelId(lc, prefs, codes)
-        val importance = when {
-            prefs.notifHeadsUp -> NotificationManager.IMPORTANCE_HIGH
-            else -> NotificationManager.IMPORTANCE_DEFAULT
-        }
-        val ch = NotificationChannel(id, if (codes) lc.getString(R.string.ch_codes) else lc.getString(R.string.messages), importance)
-        ch.description = if (codes) lc.getString(R.string.ch_codes_desc) else lc.getString(R.string.ch_messages_desc)
-        if (prefs.notifSound) {
-            val attrs = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            ch.setSound(
-                if (prefs.notifTone == 0) Sounds.receivedUri(lc) else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                attrs
+    /** Starting values only: from then on the user's choice in Android settings wins. */
+    private fun messageChannel(id: String, name: String, desc: String, lc: Context): NotificationChannel =
+        NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
+            description = desc
+            setSound(
+                Sounds.receivedUri(lc),
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
             )
-        } else {
-            ch.setSound(null, null)
+            enableVibration(true)
+            enableLights(true)
+            setShowBadge(true)
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         }
-        ch.enableVibration(prefs.notifVibrate)
-        if (prefs.notifVibrate) ch.vibrationPattern = vibration(prefs)
-        ch.enableLights(true)
-        ch.lightColor = prefs.notifColorArgb()
-        if (dndBypass(lc, prefs)) ch.setBypassDnd(true)
-        ch.setShowBadge(true)
-        ch.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        nm.createNotificationChannel(ch)
-        return id
-    }
 
     private fun allowed(ctx: Context) =
         ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    fun channelSettingsIntent(ctx: Context): Intent =
-        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+    /** Opens Android's own notification settings page for this app (sound, pop-up, lock screen, Do Not Disturb...). */
+    fun systemSettingsIntent(ctx: Context): Intent =
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-            .putExtra(Settings.EXTRA_CHANNEL_ID, channelId(ctx, Prefs(ctx), false))
 
     fun show(ctx: Context, address: String, body: String, subId: Int = -1) {
         if (!allowed(ctx)) return
         val prefs = Prefs(ctx)
-        if (!prefs.notifications) return
         val repo = SmsRepository(ctx)
         val tid = runCatching { repo.threadIdFor(address) }.getOrNull()
         if (tid != null && tid in prefs.muted) return
@@ -138,80 +117,50 @@ object Notifier {
         val nm = ensureChannels(ctx)
         val lc = Lang.wrap(ctx)
         val title = repo.contactName(address) ?: address
-        val id = address.hashCode()
-        val code = if (prefs.notifCopyCode) Otp.extract(body) else null
-        val channel = channelId(ctx, prefs, code != null)
-        val previews = prefs.previews
-        val shownBody = if (previews) body else lc.getString(R.string.notif_new_message)
-
-        // App is open elsewhere: use our own, fully customisable banner instead of the system shade.
-        if (AppState.foreground && prefs.bannerEnabled) {
-            val simLabel = if (subId >= 0) runCatching {
-                val sims = Sims.list(ctx)
-                if (sims.size > 1 && prefs.showSimLabel) sims.firstOrNull { it.subId == subId }?.label else null
-            }.getOrNull() else null
-            if (AppState.banners.tryEmit(BannerEvent(AppState.nextId(), address, title, shownBody, simLabel))) {
-                alertInForeground(ctx, prefs)
-                return
-            }
-        }
-
-        // App closed: draw our own banner over other apps; the system notification is then posted quietly
-        // (no sound / pop-up of its own) so the message still waits in the shade.
-        var overlayShown = false
-        if (!AppState.foreground && prefs.bannerEnabled && prefs.bannerOverlay && OverlayBanner.canShow(ctx)) {
-            val simLabel = if (subId >= 0) runCatching {
-                val sims = Sims.list(ctx)
-                if (sims.size > 1 && prefs.showSimLabel) sims.firstOrNull { it.subId == subId }?.label else null
-            }.getOrNull() else null
-            OverlayBanner.show(ctx, address, title, shownBody, simLabel)
-            alertInForeground(ctx, prefs)
-            overlayShown = true
-            if (nm.getNotificationChannel(CH_QUIET) == null) {
-                nm.createNotificationChannel(
-                    NotificationChannel(CH_QUIET, lc.getString(R.string.messages), NotificationManager.IMPORTANCE_LOW).apply {
-                        setSound(null, null)
-                        enableVibration(false)
-                        setShowBadge(true)
-                    }
-                )
-            }
-        }
+        val id = nid(address)
+        val code = Otp.extract(body)
+        val key = prefs.key(address)
 
         val lines = synchronized(history) {
-            val l = history.getOrPut(address) { ArrayList() }
-            l.add(shownBody to System.currentTimeMillis())
+            val l = history.getOrPut(key) { ArrayList() }
+            l.add(body to System.currentTimeMillis())
             while (l.size > MAX_LINES) l.removeAt(0)
             ArrayList(l)
         }
 
-        val sender = Person.Builder().setName(title).setKey(prefs.key(address)).build()
+        val sender = Person.Builder().setName(title).setKey(key).build()
         val me = Person.Builder().setName(lc.getString(R.string.notif_me)).build()
         val style = Notification.MessagingStyle(me)
         lines.forEach { (text, time) -> style.addMessage(text, time, sender) }
 
-        val b = Notification.Builder(ctx, if (overlayShown) CH_QUIET else channel)
+        // What the lock screen shows when the user keeps "hide sensitive content" on in Android settings.
+        val public = Notification.Builder(ctx, if (code != null) CH_CODES else CH_MESSAGES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(lc.getString(R.string.messages))
+            .setContentText(lc.getString(R.string.notif_new_message))
+            .build()
+
+        val b = Notification.Builder(ctx, if (code != null) CH_CODES else CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(shownBody)
+            .setContentText(body)
             .setStyle(style)
             .setContentIntent(open(ctx, address))
             .setDeleteIntent(dismissed(ctx, address))
             .setCategory(Notification.CATEGORY_MESSAGE)
-            .setColor(prefs.notifColorArgb())
-            .setGroup(if (prefs.notifGroup) GROUP else null)
+            .setGroup(GROUP)
             .setAutoCancel(true)
-            .setOnlyAlertOnce(false)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
-            .setVisibility(if (prefs.notifLockScreen && previews) Notification.VISIBILITY_PRIVATE else Notification.VISIBILITY_SECRET)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(public)
 
         if (subId >= 0) {
             val sims = runCatching { Sims.list(ctx) }.getOrDefault(emptyList())
-            if (sims.size > 1 && prefs.showSimLabel) sims.firstOrNull { it.subId == subId }?.let { b.setSubText(it.label) }
+            if (sims.size > 1) sims.firstOrNull { it.subId == subId }?.let { b.setSubText(it.label) }
         }
 
-        if (code != null && previews) {
+        if (code != null) {
             val copy = PendingIntent.getBroadcast(
                 ctx, id,
                 Intent(ctx, CopyCodeReceiver::class.java)
@@ -234,7 +183,7 @@ object Notifier {
             b.addAction(Notification.Action.Builder(null, lc.getString(R.string.mark_as_read), read).build())
         }
 
-        if (prefs.notifQuickReply && repo.isDefault()) {
+        if (repo.isDefault()) {
             val input = RemoteInput.Builder(KEY_REPLY).setLabel(lc.getString(R.string.notif_reply_hint)).build()
             val reply = PendingIntent.getBroadcast(
                 ctx, id xor 0x2222,
@@ -254,26 +203,17 @@ object Notifier {
         }
 
         nm.notify(id, b.build())
-        if (prefs.notifGroup) postSummary(ctx, nm, prefs)
-    }
-
-    /** The system plays nothing while we post no notification, so honour the sound / vibration switches here. */
-    private fun alertInForeground(ctx: Context, prefs: Prefs) {
-        Sounds.playReceived(ctx)
-        if (prefs.notifVibrate) runCatching {
-            ctx.getSystemService(android.os.Vibrator::class.java)
-                ?.vibrate(android.os.VibrationEffect.createWaveform(vibration(prefs), -1))
-        }
+        postSummary(ctx, nm)
     }
 
     private fun dismissed(ctx: Context, address: String): PendingIntent =
         PendingIntent.getBroadcast(
-            ctx, address.hashCode() xor 0x3333,
+            ctx, nid(address) xor 0x3333,
             Intent(ctx, NotificationDismissedReceiver::class.java).putExtra("address", address),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-    private fun postSummary(ctx: Context, nm: NotificationManager, prefs: Prefs) {
+    private fun postSummary(ctx: Context, nm: NotificationManager) {
         val active = nm.activeNotifications.count { it.id != SUMMARY_ID && it.notification.group == GROUP }
         if (active < 2) {
             if (active == 0) nm.cancel(SUMMARY_ID)
@@ -285,7 +225,7 @@ object Notifier {
             ctx, SUMMARY_ID, Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val summary = Notification.Builder(ctx, channelId(ctx, prefs, false))
+        val summary = Notification.Builder(ctx, CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(lc.getString(R.string.messages))
             .setContentText(label)
@@ -293,7 +233,6 @@ object Notifier {
             .setGroup(GROUP)
             .setGroupSummary(true)
             .setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN)
-            .setColor(prefs.notifColorArgb())
             .setContentIntent(open)
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -302,13 +241,13 @@ object Notifier {
     }
 
     fun forget(address: String) {
-        synchronized(history) { history.remove(address) }
+        synchronized(history) { history.remove(Prefs.keyOf(address)) }
     }
 
     fun cancel(ctx: Context, address: String) {
         forget(address)
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.cancel(address.hashCode())
+        nm.cancel(nid(address))
         cleanSummary(nm)
     }
 
@@ -316,10 +255,11 @@ object Notifier {
         if (readAddresses.isEmpty()) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
         val activeIds = nm.activeNotifications.map { it.id }.toSet()
+        if (activeIds.isEmpty()) return
         var changed = false
         readAddresses.forEach { a ->
-            if (a.hashCode() in activeIds) {
-                nm.cancel(a.hashCode())
+            if (nid(a) in activeIds) {
+                nm.cancel(nid(a))
                 forget(a)
                 changed = true
             }
@@ -339,10 +279,9 @@ object Notifier {
 
     fun showReplyResult(ctx: Context, address: String, sentText: String, ok: Boolean) {
         val nm = ensureChannels(ctx)
-        val id = address.hashCode()
         if (ok) {
             forget(address)
-            nm.cancel(id)
+            nm.cancel(nid(address))
             cleanSummary(nm)
         } else {
             showFailed(ctx, address, -1)
@@ -366,6 +305,6 @@ object Notifier {
             .setCategory(Notification.CATEGORY_ERROR)
             .setAutoCancel(true)
             .build()
-        nm.notify(address.hashCode() xor 0x5EED, n)
+        nm.notify(nid(address) xor 0x5EED, n)
     }
 }

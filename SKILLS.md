@@ -260,3 +260,16 @@
 - res/drawable/ic_launcher_background.png recreated: vertical green gradient sampled from the squircle edge colors
 - ic_launcher_foreground.png: squircle now about 73dp wide (fills the 72dp visible area like other icons), bubble stays inside the safe zone
 - mipmap-anydpi-v26/ic_launcher.xml, ic_launcher_round.xml: background points to @drawable/ic_launcher_background again
+
+## Task: contact sync, system notifications, fixes (v3.4)
+
+### Done
+- Live contact sync: MessagesViewModel observes the whole Contacts Provider (works with Google / Samsung / Xiaomi contacts apps), re-checks an address-book fingerprint on every resume, clears the name cache and reloads names, photos and the chat header. Name cache entries now expire (10 min hits, 1 min misses); a new contact is found even when the system PhoneLookup fails (last-9-digits fallback index).
+- Contact photos in the list, chat header, contact sheet and New Message (ui/Components.kt Avatar + PhotoCache).
+- Notification customization removed completely (banner, overlay, colors, blur, animations, tone/vibration/DND/SIM-label switches, all related prefs and strings, SYSTEM_ALERT_WINDOW and ACCESS_NOTIFICATION_POLICY permissions). Notifier now creates normal channels and Settings has one row that opens Android's notification page. Notification actions (Reply, Mark as Read, Copy Code), grouping and a hidden-content lock-screen version are always on.
+- Same number written two ways (+966 / 05...) now shares one notification id and history.
+- HeadlessSmsSendService now really sends "respond via message" texts (was an empty stub).
+- Drafts are read in one pass during refresh; MMS snippets and crash screen are localized.
+
+### Not verified
+- No compiler in the sandbox: build once with the GitHub Actions workflow and send the log if anything fails.
