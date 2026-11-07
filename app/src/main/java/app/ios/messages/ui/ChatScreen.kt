@@ -685,7 +685,7 @@ private fun BubbleContent(
                                         if (hit.tag == TAG_URL) {
                                             ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hit.item)))
                                         } else {
-                                            ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(hit.item))))
+                                            app.ios.messages.PhoneLink.dial(ctx, hit.item)
                                         }
                                     }
                                 }
@@ -1110,7 +1110,7 @@ private fun ContactSheet(name: String, address: String, photo: String?, onSearch
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ContactTile(stringResource(R.string.call), Modifier.weight(1f), { PhoneIcon(p.blue) }) {
                 onDismiss()
-                runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(address)))) }
+                runCatching { app.ios.messages.PhoneLink.dial(ctx, address) }
             }
             ContactTile(
                 stringResource(if (contactUri != null) R.string.contact_view else R.string.contact_add),
