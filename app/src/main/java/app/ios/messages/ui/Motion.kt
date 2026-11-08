@@ -11,11 +11,19 @@ import androidx.compose.animation.core.CubicBezierEasing
  * fades = ease-in-out. Change a value here and the whole app follows.
  */
 object Motion {
-    /** UINavigationController push/pop (damping ratio 1, ~0.5s settle). */
-    /** Float version of [push] with a tiny rest threshold: the default (0.01) snapped the last ~1% of the screen width at the end of a slide. */
-    fun pushF(): FiniteAnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 430f, visibilityThreshold = 0.0004f)
+    const val PushMs = 420
+    const val MenuMs = 240
+    const val Parallax = 0.3333f
+    const val PushDim = 0.2f
+    const val MenuBlur = 40f
+    const val MenuDim = 0.3f
+    val PushEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+    val MenuEase = CubicBezierEasing(0.25f, 0.8f, 0.25f, 1f)
 
-    fun <T> push(): FiniteAnimationSpec<T> = spring(dampingRatio = 1f, stiffness = 430f)
+    fun pushF(distance: Float = 1f): FiniteAnimationSpec<Float> =
+        tween((PushMs * distance.coerceIn(0f, 1f)).toInt().coerceAtLeast(200), easing = PushEase)
+
+    fun <T> push(): FiniteAnimationSpec<T> = tween(PushMs, easing = PushEase)
 
     /** Button press scale: fast down, soft settle on release. */
     fun <T> press(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.72f, stiffness = 900f)
