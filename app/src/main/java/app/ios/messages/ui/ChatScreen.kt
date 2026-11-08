@@ -1119,7 +1119,10 @@ private fun ContactSheet(name: String, address: String, photo: String?, onSearch
             ) {
                 onDismiss()
                 runCatching {
-                    if (contactUri != null) {
+                    if (app.ios.messages.ContactsLink.installed(ctx)) {
+                        if (contactUri != null) app.ios.messages.ContactsLink.view(ctx, contactUri)
+                        else app.ios.messages.ContactsLink.create(ctx, address)
+                    } else if (contactUri != null) {
                         ctx.startActivity(Intent(Intent.ACTION_VIEW, contactUri))
                     } else {
                         ctx.startActivity(

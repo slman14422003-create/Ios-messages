@@ -17,6 +17,19 @@ import android.content.ClipboardManager
 import android.os.PersistableBundle
 import app.ios.messages.data.SmsRepository
 
+internal object Work {
+    private val sequential = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "msg-ordered").apply { isDaemon = true } }
+    private val pool = java.util.concurrent.Executors.newFixedThreadPool(3) { r -> Thread(r, "msg-work").apply { isDaemon = true } }
+
+    fun ordered(block: () -> Unit) {
+        sequential.execute(block)
+    }
+
+    fun run(block: () -> Unit) {
+        pool.execute(block)
+    }
+}
+
 /** The SIM an incoming broadcast arrived on (-1 when the system does not say). */
 internal fun subIdOf(intent: Intent): Int {
     val a = intent.getIntExtra("subscription", -1)
@@ -30,7 +43,7 @@ class SmsReceiver : BroadcastReceiver() {
         if (intent.action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
         // The Telephony provider insert can be slow: never block the main thread inside a receiver.
         val pending = goAsync()
-        Thread {
+        Work.ordered {
             try {
                 handle(context.applicationContext, intent)
             } catch (e: Throwable) {
@@ -38,7 +51,7 @@ class SmsReceiver : BroadcastReceiver() {
             } finally {
                 pending.finish()
             }
-        }.start()
+        }
     }
 
     private fun handle(context: Context, intent: Intent) {
@@ -72,14 +85,14 @@ class MmsReceiver : BroadcastReceiver() {
         val data = intent.getByteArrayExtra("data") ?: return
         val sub = subIdOf(intent)
         val pending = goAsync()
-        Thread {
+        Work.run {
             try {
                 Mms.download(context.applicationContext, data, sub)
             } catch (_: Throwable) {
             } finally {
                 pending.finish()
             }
-        }.start()
+        }
     }
 }
 
@@ -115,14 +128,14 @@ class MmsDownloadedReceiver : BroadcastReceiver() {
         val ok = resultCode == Activity.RESULT_OK
         val sub = intent.getIntExtra("sub_id", -1)
         val pending = goAsync()
-        Thread {
+        Work.run {
             try {
                 Mms.onDownloaded(context, path, from, ok, sub)?.let { Notifier.show(context, it.first, it.second, sub) }
             } catch (_: Throwable) {
             } finally {
                 pending.finish()
             }
-        }.start()
+        }
     }
 }
 
@@ -145,7 +158,7 @@ class HeadlessSmsSendService : Service() {
         }
         val app = applicationContext
         val sub = subIdOf(i)
-        Thread {
+        Work.run {
             try {
                 SmsRepository(app).send(to, text, sub)
             } catch (e: Throwable) {
@@ -153,7 +166,7 @@ class HeadlessSmsSendService : Service() {
             } finally {
                 stopSelf(startId)
             }
-        }.start()
+        }
         return START_NOT_STICKY
     }
 }
@@ -224,7 +237,7 @@ class MarkReadReceiver : BroadcastReceiver() {
         val tid = intent.getLongExtra("thread_id", -1L)
         val address = intent.getStringExtra("address") ?: return
         val pending = goAsync()
-        Thread {
+        Work.run {
             try {
                 if (tid >= 0) SmsRepository(context).markRead(tid)
                 Notifier.cancel(context, address)
@@ -232,7 +245,7 @@ class MarkReadReceiver : BroadcastReceiver() {
             } finally {
                 pending.finish()
             }
-        }.start()
+        }
     }
 }
 
@@ -267,7 +280,7 @@ class ReplyReceiver : BroadcastReceiver() {
         val sub = intent.getIntExtra("sub_id", -1)
         val tid = intent.getLongExtra("thread_id", -1L)
         val pending = goAsync()
-        Thread {
+        Work.run {
             var ok = true
             try {
                 val repo = SmsRepository(context)
@@ -281,6 +294,6 @@ class ReplyReceiver : BroadcastReceiver() {
             } finally {
                 pending.finish()
             }
-        }.start()
+        }
     }
 }

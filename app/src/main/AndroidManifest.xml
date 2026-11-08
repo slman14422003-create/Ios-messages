@@ -24,6 +24,7 @@
     <!-- Package visibility (Android 11+): the companion iOS Phone app. -->
     <queries>
         <package android:name="com.iosphone.app" />
+        <package android:name="com.iosphone.contacts" />
     </queries>
 
     <application

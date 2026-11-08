@@ -89,12 +89,14 @@ class MainActivity : ComponentActivity() {
     private var pendingAddress by mutableStateOf<String?>(null)
     private var appearance by mutableStateOf(0)
     private var textScale by mutableStateOf(1f)
+    private var returnToCaller by mutableStateOf(false)
 
     /** True when the integrity check failed: nothing from the message store is touched. */
     private var locked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Transitions.install(this)
         // Block screenshots / screen recording / app-switcher preview, and ignore taps while another
         // app draws over us (tapjacking).
         applyScreenSecure(Prefs(this).screenSecure)
@@ -120,7 +122,10 @@ class MainActivity : ComponentActivity() {
             }
             return
         }
-        if (savedInstanceState == null) pendingAddress = addressFrom(intent)
+        if (savedInstanceState == null) {
+            pendingAddress = addressFrom(intent)
+            returnToCaller = pendingAddress != null && intent.getBooleanExtra(Transitions.EXTRA_RETURN, false)
+        }
         setContent {
             val blue by vm.bubbleBlue.collectAsStateWithLifecycle()
             val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -149,7 +154,9 @@ class MainActivity : ComponentActivity() {
                     appearance = appearance,
                     onAppearance = { appearance = it; Prefs(this).appearance = it },
                     textScale = textScale,
-                    onTextScale = { textScale = it; Prefs(this).textScale = it }
+                    onTextScale = { textScale = it; Prefs(this).textScale = it },
+                    returnToCaller = returnToCaller,
+                    onReturn = { finish() }
                 ) { pendingAddress = null }
             }
             }
@@ -158,7 +165,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        addressFrom(intent)?.let { pendingAddress = it }
+        addressFrom(intent)?.let {
+            pendingAddress = it
+            returnToCaller = intent.getBooleanExtra(Transitions.EXTRA_RETURN, false)
+        }
+    }
+
+    override fun onStop() {
+        returnToCaller = false
+        super.onStop()
+    }
+
+    override fun finish() {
+        super.finish()
+        Transitions.finished(this)
     }
 
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -255,7 +275,7 @@ private fun requiredPermissions(): Array<String> = buildList {
 }.toTypedArray()
 
 @Composable
-private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (String) -> Unit, appearance: Int, onAppearance: (Int) -> Unit, textScale: Float, onTextScale: (Float) -> Unit, onConsumed: () -> Unit) {
+private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (String) -> Unit, appearance: Int, onAppearance: (Int) -> Unit, textScale: Float, onTextScale: (Float) -> Unit, returnToCaller: Boolean, onReturn: () -> Unit, onConsumed: () -> Unit) {
     val ctx = LocalContext.current
     val language = remember { Prefs(ctx).language }
     val dir = rtlSign()
@@ -295,7 +315,15 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     // iOS push/pop: the chat slides in, the list moves left at ~30% speed. Driven by graphicsLayer
     // so the animation never triggers recomposition.
     val progress = remember { Animatable(if (chat != null) 1f else 0f) }
+    var returnArmed by remember { mutableStateOf(false) }
     LaunchedEffect(chat != null) {
+        if (chat != null) {
+            returnArmed = true
+        } else if (returnArmed && returnToCaller) {
+            returnArmed = false
+            onReturn()
+            return@LaunchedEffect
+        }
         if (chat != null) {
             if (chat?.address != null || chat?.threadId != null) {
                 chatReady = false
@@ -305,10 +333,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             }
             withFrameNanos { }
         }
-        progress.animateTo(
-            if (chat != null) 1f else 0f,
-            Motion.pushF()
-        )
+        val goal = if (chat != null) 1f else 0f
+        progress.animateTo(goal, Motion.pushF(kotlin.math.abs(goal - progress.value)))
         if (chat == null) vm.clearMessages() else {
             // Let the settled screen draw a few frames before the full reload starts.
             kotlinx.coroutines.delay(250)
@@ -319,10 +345,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
 
     val settingsProgress = remember { Animatable(if (settingsOpen) 1f else 0f) }
     LaunchedEffect(settingsOpen) {
-        settingsProgress.animateTo(
-            if (settingsOpen) 1f else 0f,
-            Motion.pushF()
-        )
+        val goal = if (settingsOpen) 1f else 0f
+        settingsProgress.animateTo(goal, Motion.pushF(kotlin.math.abs(goal - settingsProgress.value)))
     }
     val settingsVisible by remember { derivedStateOf { settingsProgress.value > 0.001f } }
 
@@ -353,7 +377,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             chat = null
             vm.closeChat()
         } catch (c: kotlinx.coroutines.CancellationException) {
-            backScope.launch { progress.animateTo(1f, Motion.pushF()) }
+            backScope.launch { progress.animateTo(1f, Motion.pushF(1f - progress.value)) }
         }
     }
     PredictiveBackHandler(enabled = settingsOpen) { events ->
@@ -361,7 +385,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             events.collect { e -> settingsProgress.snapTo((1f - e.progress).coerceIn(0f, 1f)) }
             settingsOpen = false
         } catch (c: kotlinx.coroutines.CancellationException) {
-            backScope.launch { settingsProgress.animateTo(1f, Motion.pushF()) }
+            backScope.launch { settingsProgress.animateTo(1f, Motion.pushF(1f - settingsProgress.value)) }
         }
     }
 
@@ -369,7 +393,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         app.ios.messages.ui.BlurWarmUp()
         Box(Modifier.fillMaxSize().graphicsLayer {
             val pr = maxOf(progress.value, settingsProgress.value)
-            translationX = -pr * size.width * 0.3f * dir
+            translationX = -pr * size.width * Motion.Parallax * dir
             // While sliding, keep the screen behind as one cached texture instead of re-drawing it every frame.
             // Stays one cached texture for the whole time a page is on top (no switch at the end of the slide).
             compositingStrategy = if (pr > 0.001f) androidx.compose.ui.graphics.CompositingStrategy.Offscreen
@@ -409,7 +433,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         }
 
         if (chatVisible || chat != null) {
-            Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = progress.value * 0.25f) })
+            Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = progress.value * Motion.PushDim) })
             shown?.let { t ->
                 LaunchedEffect(t) {
                     if (t.address != null || t.threadId != null) vm.openChat(t.threadId, t.address)
@@ -478,7 +502,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             // recomposes the whole app root.
             val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
             val defaultSub by vm.defaultSub.collectAsStateWithLifecycle()
-            Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = settingsProgress.value * 0.25f) })
+            Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = settingsProgress.value * Motion.PushDim) })
             Box(
                 Modifier
                     .fillMaxSize()
@@ -600,13 +624,12 @@ private fun EdgeSwipeBack(
             .fillMaxHeight()
             .width(12.dp)
             .pointerInput(Unit) {
-                val settle = spring<Float>(dampingRatio = 1f, stiffness = 260f)
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         if (progress.value < 0.55f) commit()
-                        else scope.launch { progress.animateTo(1f, settle) }
+                        else scope.launch { progress.animateTo(1f, Motion.pushF(1f - progress.value)) }
                     },
-                    onDragCancel = { scope.launch { progress.animateTo(1f, settle) } },
+                    onDragCancel = { scope.launch { progress.animateTo(1f, Motion.pushF(1f - progress.value)) } },
                     onHorizontalDrag = { change, dx ->
                         change.consume()
                         scope.launch { progress.snapTo((progress.value - dir * dx / widthPx).coerceIn(0f, 1f)) }

@@ -10,6 +10,11 @@ import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.content.LocusId
+import android.graphics.BitmapFactory
+import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.net.Uri
 import android.provider.Settings
@@ -23,6 +28,13 @@ import app.ios.messages.data.SmsRepository
  * delivery problems) and never overrides sound, vibration, pop-up, lock-screen visibility or Do Not Disturb.
  * Everything the user wants to change lives in the system's notification settings for this app.
  */
+private object SharedRepo {
+    @Volatile private var repo: SmsRepository? = null
+
+    fun get(ctx: Context): SmsRepository =
+        repo ?: synchronized(this) { repo ?: SmsRepository(ctx.applicationContext).also { repo = it } }
+}
+
 object Notifier {
     const val KEY_REPLY = "reply_text"
     const val CH_MESSAGES = "messages_v4"
@@ -109,7 +121,7 @@ object Notifier {
     fun show(ctx: Context, address: String, body: String, subId: Int = -1) {
         if (!allowed(ctx)) return
         val prefs = Prefs(ctx)
-        val repo = SmsRepository(ctx)
+        val repo = SharedRepo.get(ctx)
         val tid = runCatching { repo.threadIdFor(address) }.getOrNull()
         if (tid != null && tid in prefs.muted) return
         // The conversation is on screen right now: the message is already visible (and gets marked read).
@@ -128,7 +140,10 @@ object Notifier {
             ArrayList(l)
         }
 
-        val sender = Person.Builder().setName(title).setKey(key).build()
+        val photoIcon = avatar(ctx, repo.contactPhoto(address))
+        val sender = Person.Builder().setName(title).setKey(key).apply { if (photoIcon != null) setIcon(photoIcon) }.build()
+        val shortcutId = "chat_" + key
+        publishShortcut(ctx, shortcutId, title, sender, photoIcon, address)
         val me = Person.Builder().setName(lc.getString(R.string.notif_me)).build()
         val style = Notification.MessagingStyle(me)
         lines.forEach { (text, time) -> style.addMessage(text, time, sender) }
@@ -154,6 +169,8 @@ object Notifier {
             .setShowWhen(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setPublicVersion(public)
+            .setShortcutId(shortcutId)
+            .setLocusId(LocusId(shortcutId))
 
         if (subId >= 0) {
             val sims = runCatching { Sims.list(ctx) }.getOrDefault(emptyList())
@@ -180,7 +197,12 @@ object Notifier {
                     .putExtra("notif_id", id),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            b.addAction(Notification.Action.Builder(null, lc.getString(R.string.mark_as_read), read).build())
+            b.addAction(
+                Notification.Action.Builder(null, lc.getString(R.string.mark_as_read), read)
+                    .setSemanticAction(Notification.Action.SEMANTIC_ACTION_MARK_AS_READ)
+                    .setShowsUserInterface(false)
+                    .build()
+            )
         }
 
         if (repo.isDefault()) {
@@ -204,6 +226,31 @@ object Notifier {
 
         nm.notify(id, b.build())
         postSummary(ctx, nm)
+    }
+
+    private fun avatar(ctx: Context, photo: String?): Icon? {
+        if (photo.isNullOrEmpty()) return null
+        return runCatching {
+            ctx.contentResolver.openInputStream(Uri.parse(photo))?.use { BitmapFactory.decodeStream(it) }
+                ?.let { Icon.createWithBitmap(it) }
+        }.getOrNull()
+    }
+
+    private fun publishShortcut(ctx: Context, id: String, title: String, person: Person, icon: Icon?, address: String) {
+        runCatching {
+            val sm = ctx.getSystemService(ShortcutManager::class.java) ?: return@runCatching
+            val intent = Intent(ctx, MainActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .setData(Uri.parse("smsto:" + Uri.encode(address)))
+            val info = ShortcutInfo.Builder(ctx, id)
+                .setShortLabel(title)
+                .setLongLived(true)
+                .setPerson(person)
+                .setIntent(intent)
+                .apply { if (icon != null) setIcon(icon) }
+                .build()
+            sm.pushDynamicShortcut(info)
+        }
     }
 
     private fun dismissed(ctx: Context, address: String): PendingIntent =
@@ -292,7 +339,7 @@ object Notifier {
         if (!allowed(ctx)) return
         val nm = ensureChannels(ctx)
         val lc = Lang.wrap(ctx)
-        val title = SmsRepository(ctx).contactName(address) ?: address
+        val title = SharedRepo.get(ctx).contactName(address) ?: address
         val sims = runCatching { Sims.list(ctx) }.getOrDefault(emptyList())
         val other = sims.firstOrNull { it.subId != subId }
         val text = if (other != null) lc.getString(R.string.failed_retry_sim, other.label)

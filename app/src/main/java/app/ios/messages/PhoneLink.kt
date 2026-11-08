@@ -20,9 +20,10 @@ object PhoneLink {
         val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number)))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (installed(context)) intent.setPackage(PACKAGE)
-        if (runCatching { context.startActivity(intent) }.isFailure && intent.`package` != null) {
+        intent.putExtra(Transitions.EXTRA_RETURN, true)
+        if (!Transitions.start(context, intent) && intent.`package` != null) {
             intent.setPackage(null)
-            runCatching { context.startActivity(intent) }
+            Transitions.start(context, intent)
         }
     }
 }
