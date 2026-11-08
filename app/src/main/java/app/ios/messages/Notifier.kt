@@ -200,7 +200,6 @@ object Notifier {
             b.addAction(
                 Notification.Action.Builder(null, lc.getString(R.string.mark_as_read), read)
                     .setSemanticAction(Notification.Action.SEMANTIC_ACTION_MARK_AS_READ)
-                    .setShowsUserInterface(false)
                     .build()
             )
         }
