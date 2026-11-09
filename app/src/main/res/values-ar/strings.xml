@@ -184,4 +184,5 @@
     <string name="crash_hint">انسخ هذا التقرير لمشاركته مع المطوّر:</string>
     <string name="crash_copy">نسخ</string>
     <string name="crash_retry">حاول فتح التطبيق</string>
+    <string name="sms_service">رسالة نصية • SMS</string>
 </resources>
