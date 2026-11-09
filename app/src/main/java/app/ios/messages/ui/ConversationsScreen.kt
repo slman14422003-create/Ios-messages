@@ -173,7 +173,7 @@ fun ConversationsScreen(
                     { selBarH }, { if (selecting) 1f else 0f },
                     p.bg, p.bar.copy(alpha = 0.7f), blurPx
                 ),
-            contentPadding = PaddingValues(top = top + 44.dp, bottom = bottom + if (selecting) 56.dp else 0.dp)
+            contentPadding = PaddingValues(top = top + 52.dp, bottom = bottom + if (selecting) 56.dp else 0.dp)
         ) {
             item(key = "title") {
                 Text(
@@ -413,17 +413,20 @@ fun ConversationsScreen(
                 .onSizeChanged { headerH = it.height.toFloat() }
                 .statusBarsPadding()
         ) {
-            Box(Modifier.fillMaxWidth().height(44.dp)) {
+            Box(Modifier.fillMaxWidth().height(52.dp)) {
                 Box(Modifier.align(Alignment.CenterStart)) {
-                    Text(
-                        if (selecting) stringResource(R.string.done) else stringResource(R.string.edit),
-                        color = p.blue,
-                        fontSize = 17.sp,
-                        fontWeight = if (selecting) FontWeight.SemiBold else FontWeight.Normal,
-                        modifier = Modifier
-                            .dimClickable { if (selecting) endSelecting() else editMenu = true }
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    )
+                    GlassPill(
+                        Modifier.padding(start = 12.dp),
+                        onClick = { if (selecting) endSelecting() else editMenu = true }
+                    ) {
+                        Text(
+                            if (selecting) stringResource(R.string.done) else stringResource(R.string.edit),
+                            color = p.blue,
+                            fontSize = 17.sp,
+                            fontWeight = if (selecting) FontWeight.SemiBold else FontWeight.Normal,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                     IosMenu(expanded = editMenu, onDismissRequest = { editMenu = false }, originX = 0.1f) {
                         IosMenuItem(
                             text = { Text(stringResource(R.string.select_messages)) },
@@ -444,11 +447,7 @@ fun ConversationsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box {
-                            Box(
-                                Modifier
-                                    .dimClickable { filterMenu = true }
-                                    .padding(horizontal = 10.dp, vertical = 10.dp)
-                            ) { GearIcon(p.blue) }
+                            GlassCircle(40.dp, Modifier.padding(horizontal = 3.dp), onClick = { filterMenu = true }) { GearIcon(p.blue) }
                             IosMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, originX = 0.9f) {
                                 IosMenuRow(
                                     checked = filterIdx == 0,
@@ -486,11 +485,7 @@ fun ConversationsScreen(
                                 ) { Text(stringResource(R.string.settings)) }
                             }
                         }
-                        Box(
-                            Modifier
-                                .dimClickable(onCompose)
-                                .padding(start = 6.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)
-                        ) { ComposeIcon(p.blue) }
+                        GlassCircle(40.dp, Modifier.padding(start = 3.dp, end = 12.dp), onClick = onCompose) { ComposeIcon(p.blue) }
                     }
                 }
             }

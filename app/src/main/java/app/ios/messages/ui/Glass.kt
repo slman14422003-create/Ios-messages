@@ -60,6 +60,12 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.Shape
 
 /** Snapshot of the app window taken when a menu opens; menus blur it to look like iOS materials. */
 class Backdrop(
@@ -553,3 +559,38 @@ fun BlurWarmUp() {
         )
     }
 }
+
+
+/** Bouncy press feedback ported from the phone app: quick squash, springy release. */
+fun Modifier.springPress(src: androidx.compose.foundation.interaction.InteractionSource, pressedScale: Float = 0.9f): Modifier = composed {
+    val pressed by src.collectIsPressedAsState()
+    val s by animateFloatAsState(
+        if (pressed) pressedScale else 1f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = androidx.compose.animation.core.Spring.StiffnessMedium),
+        label = "springPress"
+    )
+    this.graphicsLayer { scaleX = s; scaleY = s }
+}
+
+/** Liquid-glass surface: soft shadow, translucent fill, bright top edge that fades toward the bottom. */
+fun Modifier.liquidGlass(shape: Shape, fill: Color, dark: Boolean): Modifier = this
+    .shadow(
+        14.dp, shape, clip = false,
+        ambientColor = Color.Black.copy(alpha = if (dark) 0.40f else 0.10f),
+        spotColor = Color.Black.copy(alpha = if (dark) 0.50f else 0.20f)
+    )
+    .clip(shape)
+    .background(fill)
+    .background(
+        Brush.verticalGradient(
+            listOf(Color.White.copy(alpha = if (dark) 0.10f else 0.55f), Color.Transparent)
+        ),
+        shape
+    )
+    .border(
+        0.6.dp,
+        Brush.verticalGradient(
+            listOf(Color.White.copy(alpha = if (dark) 0.28f else 0.9f), Color.White.copy(alpha = if (dark) 0.05f else 0.25f))
+        ),
+        shape
+    )

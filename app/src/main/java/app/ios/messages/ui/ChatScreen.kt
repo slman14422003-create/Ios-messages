@@ -416,26 +416,30 @@ private fun ChatScreenBody(
                     Column(
                         Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 2.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .plainClickable { menu = true }
-                            .padding(horizontal = 18.dp, vertical = 4.dp),
+                            .padding(top = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Avatar(name, 58.dp, target.photo)
+                        Box(Modifier.clip(CircleShape).plainClickable { menu = true }) {
+                            Avatar(name, 62.dp, target.photo, tint = HeaderAvatarTint)
+                        }
                         Spacer(Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                name,
-                                color = p.label,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 220.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            ChevronRight(p.secondary, width = 6, height = 11, stroke = 1.6f)
+                        GlassPill(onClick = { menu = true }) {
+                            Row(
+                                Modifier.padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    name,
+                                    color = p.label,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 200.dp)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                                ChevronRight(p.tertiary, width = 6, height = 11, stroke = 1.8f)
+                            }
                         }
                     }
                     val headerSim = sims.firstOrNull { it.subId == simSel }
@@ -607,14 +611,26 @@ private fun TimeHeader(t: ChatItem.Time) {
         append(" ")
         append(t.time)
     }
-    Text(
-        label,
-        color = p.secondary,
-        fontSize = 11.sp,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp)
-    )
+    Column(
+        Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            stringResource(R.string.sms_service),
+            color = p.secondary,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            label,
+            color = p.secondary,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
 }
+
+private val HeaderAvatarTint = Pair(Color(0xFF9DAAE6), Color(0xFF727BBE))
 
 @Composable
 private fun BubbleContent(

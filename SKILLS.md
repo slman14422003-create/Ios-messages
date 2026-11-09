@@ -273,3 +273,21 @@
 
 ### Not verified
 - No compiler in the sandbox: build once with the GitHub Actions workflow and send the log if anything fails.
+
+## Task: iPhone-style chat header and glass effects borrowed from the phone project
+
+### Done
+- ui/Glass.kt: added Modifier.springPress (bouncy press spring from the phone app) and Modifier.liquidGlass (soft shadow, translucent fill, bright top edge gradient)
+- ui/Components.kt: GlassCircle now uses liquidGlass + springPress; new GlassPill capsule; Avatar takes an optional tint gradient
+- ui/ChatScreen.kt: header matches the iOS 26 reference (glass back circle, larger tinted avatar, contact name inside a glass pill with chevron); every time header now shows "Text Message • SMS" above the date
+- ui/ConversationsScreen.kt: Edit button in a glass pill, settings and compose buttons in glass circles, header height 52dp
+- res/values and values-ar: new string sms_service
+
+### Decision
+- The phone project's BlurView module was not copied: it needs a separate BlurTarget view wrapping the content, which cannot work for bars that live inside the same Compose tree. The existing RenderNode live blur (liveBlurEdges) already covers bars; only the pure Compose effects were ported
+
+### Not verified
+- No compiler in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+### Next ideas
+- Apply GlassPill/GlassCircle to the new message and settings screens, tune avatar tint colors against the reference, optional ScreenBlur dimming behind context menus

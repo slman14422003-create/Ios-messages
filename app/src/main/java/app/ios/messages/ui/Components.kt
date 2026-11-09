@@ -225,7 +225,7 @@ object PhotoCache {
 
 /** iOS-style contact avatar: the contact's photo when there is one, else gray gradient + initials, or a silhouette for unknown numbers. */
 @Composable
-fun Avatar(name: String, size: Dp, photo: String? = null) {
+fun Avatar(name: String, size: Dp, photo: String? = null, tint: Pair<Color, Color>? = null) {
     val p = LocalPalette.current
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val initials = remember(name) { initialsOf(name) }
@@ -237,7 +237,7 @@ fun Avatar(name: String, size: Dp, photo: String? = null) {
         Modifier
             .size(size)
             .clip(CircleShape)
-            .background(Brush.verticalGradient(listOf(p.avatarTop, p.avatarBottom))),
+            .background(Brush.verticalGradient(listOf(tint?.first ?: p.avatarTop, tint?.second ?: p.avatarBottom))),
         contentAlignment = Alignment.Center
     ) {
         val bmp = bitmap
@@ -269,16 +269,30 @@ fun Avatar(name: String, size: Dp, photo: String? = null) {
 @Composable
 fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, content: @Composable () -> Unit) {
     val p = LocalPalette.current
+    val dark = LocalDark.current
     val src = remember { MutableInteractionSource() }
     Box(
         modifier
             .size(size)
-            .pressScale(src, 0.88f)
-            .shadow(10.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.28f), spotColor = Color.Black.copy(alpha = 0.28f))
-            .clip(CircleShape)
-            .background(p.glass)
-            .border(Dp.Hairline, p.separator, CircleShape)
+            .springPress(src, 0.86f)
+            .liquidGlass(CircleShape, p.glass, dark)
             .clickable(interactionSource = src, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+/** Capsule version of [GlassCircle], used for the contact name under the avatar. */
+@Composable
+fun GlassPill(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    val dark = LocalDark.current
+    val src = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier
+            .springPress(src, 0.94f)
+            .liquidGlass(shape, p.glass, dark)
+            .then(if (onClick != null) Modifier.clickable(interactionSource = src, indication = null, onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) { content() }
 }
