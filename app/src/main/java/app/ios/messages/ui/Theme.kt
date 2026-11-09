@@ -48,15 +48,15 @@ val LightPalette = Palette(
     secondary = Color(0xFF8A8A8E),
     tertiary = Color(0xFFC4C4C7),
     separator = Color(0x4A3C3C43),
-    fieldFill = Color(0x1F767680),
+    fieldFill = Color(0x1F787880),
     received = Color(0xFFE9E9EB),
     receivedText = Color.Black,
     bar = Color(0xD9F9F9F9),
     blue = Color(0xFF007AFF),
     pressed = Color(0xFFD1D1D6),
     outline = Color(0xFFC6C6C8),
-    avatarTop = Color(0xFFA6AAB4),
-    avatarBottom = Color(0xFF828690),
+    avatarTop = Color(0xFFB7BFDB),
+    avatarBottom = Color(0xFF8E98BD),
     glass = Color(0xA8FFFFFF),
     groupBg = Color(0xFFF2F2F7),
     cell = Color.White
@@ -67,16 +67,16 @@ val DarkPalette = Palette(
     label = Color.White,
     secondary = Color(0xFF8D8D93),
     tertiary = Color(0xFF58585C),
-    separator = Color(0xFF38383A),
-    fieldFill = Color(0x3D767680),
+    separator = Color(0x99545458),
+    fieldFill = Color(0x5C787880),
     received = Color(0xFF262629),
     receivedText = Color.White,
     bar = Color(0xD9161618),
     blue = Color(0xFF0A84FF),
     pressed = Color(0xFF2C2C2E),
     outline = Color(0xFF3A3A3C),
-    avatarTop = Color(0xFF6D717A),
-    avatarBottom = Color(0xFF4B4E55),
+    avatarTop = Color(0xFF7B84A6),
+    avatarBottom = Color(0xFF555D80),
     glass = Color(0x99303033),
     groupBg = Color.Black,
     cell = Color(0xFF1C1C1E)
@@ -99,4 +99,17 @@ fun IMessageTheme(sent: Color = SentBubble, appearance: Int = 0, content: @Compo
             ProvideTextStyle(TextStyle(letterSpacing = (-0.2).sp)) { content() }
         }
     }
+}
+
+/** Same type scale as the phone app, so titles, rows and footnotes line up between the two apps. */
+object IosType {
+    private val base = androidx.compose.ui.text.font.FontFamily.SansSerif
+    private val semi = androidx.compose.ui.text.font.FontWeight.SemiBold
+    private val normal = androidx.compose.ui.text.font.FontWeight.Normal
+    val largeTitle = TextStyle(fontFamily = base, fontSize = 34.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, letterSpacing = 0.37.sp)
+    val title3 = TextStyle(fontFamily = base, fontSize = 20.sp, fontWeight = normal, letterSpacing = 0.38.sp)
+    val headline = TextStyle(fontFamily = base, fontSize = 17.sp, fontWeight = semi, letterSpacing = (-0.43).sp)
+    val body = TextStyle(fontFamily = base, fontSize = 17.sp, fontWeight = normal, letterSpacing = (-0.43).sp)
+    val callout = TextStyle(fontFamily = base, fontSize = 15.sp, fontWeight = normal, letterSpacing = (-0.2).sp)
+    val footnote = TextStyle(fontFamily = base, fontSize = 13.sp, fontWeight = normal, letterSpacing = (-0.08).sp)
 }

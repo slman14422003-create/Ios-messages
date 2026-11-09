@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -90,21 +93,24 @@ fun SettingsScreen(
         })
     }
     val scroll = rememberScrollState()
-    val live = remember { LiveBlur() }
-    var headerH by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    val blurPx = with(androidx.compose.ui.platform.LocalDensity.current) { 22.dp.toPx() }
-    val topInset = WindowInsets.statusBars
-        .asPaddingValues().calculateTopPadding()
     Box(Modifier.fillMaxSize().background(p.groupBg)) {
+        Column(Modifier.fillMaxSize()) {
+        Row(Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            GlassCircle(44.dp, onClick = onBack) { ChevronLeft(p.label) }
+        }
         Column(
             Modifier
-                .fillMaxSize()
-                .liveBlurEdge(live, false, { headerH }, { (scroll.value / 24f).coerceIn(0f, 1f) }, p.groupBg, p.bar.copy(alpha = 0.7f), blurPx)
+                .weight(1f)
                 .verticalScroll(scroll)
-                .padding(top = topInset + 44.dp)
                 .navigationBarsPadding()
                 .padding(bottom = 32.dp)
         ) {
+            Text(
+                stringResource(R.string.settings),
+                color = p.label,
+                style = IosType.largeTitle,
+                modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+            )
             Section(
                 stringResource(R.string.default_app),
                 stringResource(R.string.default_app_desc)
@@ -153,14 +159,16 @@ fun SettingsScreen(
             }
 
             Section(stringResource(R.string.appearance)) {
-                listOf(
-                    0 to stringResource(R.string.appearance_auto),
-                    1 to stringResource(R.string.appearance_light),
-                    2 to stringResource(R.string.appearance_dark)
-                ).forEachIndexed { i, (v, label) ->
-                    SettingRow(label, last = i == 2, onClick = { onAppearance(v) }) {
-                        if (appearance == v) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
-                    }
+                Box(Modifier.padding(16.dp)) {
+                    Segmented(
+                        options = listOf(
+                            stringResource(R.string.appearance_auto),
+                            stringResource(R.string.appearance_light),
+                            stringResource(R.string.appearance_dark)
+                        ),
+                        selected = appearance,
+                        onSelect = onAppearance
+                    )
                 }
             }
 
@@ -207,15 +215,18 @@ fun SettingsScreen(
                 }
             }
 
+            val langTags = listOf("system", "en", "ar")
             Section(stringResource(R.string.language), stringResource(R.string.language_desc)) {
-                listOf(
-                    "system" to stringResource(R.string.lang_system),
-                    "en" to stringResource(R.string.lang_english),
-                    "ar" to stringResource(R.string.lang_arabic)
-                ).forEachIndexed { i, (tag, label) ->
-                    SettingRow(label, last = i == 2, onClick = { if (language != tag) onLanguage(tag) }) {
-                        if (language == tag) CheckMark(p.blue) else Spacer(Modifier.size(16.dp))
-                    }
+                Box(Modifier.padding(16.dp)) {
+                    Segmented(
+                        options = listOf(
+                            stringResource(R.string.lang_system),
+                            stringResource(R.string.lang_english),
+                            stringResource(R.string.lang_arabic)
+                        ),
+                        selected = langTags.indexOf(language).coerceAtLeast(0),
+                        onSelect = { i -> if (language != langTags[i]) onLanguage(langTags[i]) }
+                    )
                 }
             }
 
@@ -267,6 +278,7 @@ fun SettingsScreen(
                 }
             }
         }
+        }
         pendingKeep?.let { d ->
             IosConfirm(
                 title = stringResource(R.string.keep_confirm, if (d == 30) stringResource(R.string.keep_30) else stringResource(R.string.keep_year)),
@@ -274,35 +286,6 @@ fun SettingsScreen(
                 onConfirm = { pendingKeep = null; onKeepDays(d) },
                 onDismiss = { pendingKeep = null }
             )
-        }
-        Column(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .onSizeChanged { headerH = it.height.toFloat() }
-                .statusBarsPadding()
-        ) {
-            Box(Modifier.fillMaxWidth().height(44.dp)) {
-                Row(
-                    Modifier
-                        .align(Alignment.CenterStart)
-                        .plainClickable(onBack)
-                        .padding(start = 12.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ChevronLeft(p.blue)
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.messages), color = p.blue, fontSize = 17.sp)
-                }
-                Text(
-                    stringResource(R.string.settings),
-                    color = p.label,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-            Hairline(Modifier.graphicsLayer { alpha = (scroll.value / 24f).coerceIn(0f, 1f) })
         }
     }
 }
@@ -314,17 +297,18 @@ internal fun Section(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val p = LocalPalette.current
+    // Same metrics as the phone app: caps header, 20dp card, footnote footer.
     Text(
         title.uppercase(),
         color = p.secondary,
-        fontSize = 13.sp,
-        modifier = Modifier.padding(start = 32.dp, top = 24.dp, bottom = 7.dp)
+        style = IosType.footnote,
+        modifier = Modifier.padding(start = 28.dp, top = 22.dp, bottom = 8.dp)
     )
     Column(
         Modifier
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(p.cell),
         content = content
     )
@@ -332,8 +316,8 @@ internal fun Section(
         Text(
             footer,
             color = p.secondary,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 7.dp)
+            style = IosType.footnote,
+            modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 8.dp)
         )
     }
 }
@@ -352,23 +336,26 @@ internal fun SettingRow(
             .then(if (onClick != null) Modifier.iosClickable(onClick) else Modifier)
     ) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, color = p.label, fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text(title, color = p.label, style = IosType.body, modifier = Modifier.weight(1f))
             trailing()
         }
         if (!last) Hairline(Modifier.align(Alignment.BottomStart).padding(start = 16.dp))
     }
 }
 
+/** iOS switch: green when on, the system fill colour when off (identical to the phone app's switch). */
 @Composable
 internal fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
-    val track by animateColorAsState(if (checked) SentBubble else p.received, Motion.fade(250), label = "track")
+    val dark = LocalDark.current
+    val on = if (dark) Color(0xFF30D158) else Color(0xFF34C759)
+    val track by animateColorAsState(if (checked) on else p.fieldFill, Motion.fade(220), label = "track")
     val x by animateDpAsState(
         if (checked) 20.dp else 0.dp,
-        Motion.knob(),
+        spring(dampingRatio = 0.7f, stiffness = androidx.compose.animation.core.Spring.StiffnessMedium),
         label = "knob"
     )
     Box(
@@ -384,12 +371,58 @@ internal fun IosSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
             Modifier
                 .offset(x = x)
                 .size(27.dp)
-                .shadow(2.dp, CircleShape)
+                .shadow(3.dp, CircleShape)
                 .background(Color.White, CircleShape)
         )
     }
 }
 
+/** Three-way control used for Appearance and Language, same as the phone app. */
+@Composable
+internal fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    val p = LocalPalette.current
+    val dark = LocalDark.current
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(10.dp)).background(p.fieldFill)
+    ) {
+        val w = maxWidth / options.size
+        val x by animateDpAsState(
+            w * selected,
+            spring(dampingRatio = 0.8f, stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+            label = "segment"
+        )
+        Box(
+            Modifier
+                .offset(x = x)
+                .width(w)
+                .fillMaxHeight()
+                .padding(2.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (dark) Color(0xFF636366) else Color.White)
+        )
+        Row(Modifier.fillMaxSize()) {
+            options.forEachIndexed { i, label ->
+                val src = remember { MutableInteractionSource() }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .springPress(src, 0.97f)
+                        .clickable(interactionSource = src, indication = null) { onSelect(i) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        color = p.label,
+                        style = IosType.callout,
+                        fontWeight = if (i == selected) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SimEditDialog(sim: SimInfo, onDismiss: () -> Unit, onSave: (String, Long) -> Unit) {
