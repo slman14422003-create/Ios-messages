@@ -585,3 +585,29 @@ fun Modifier.liquidGlass(shape: Shape, fill: Color, dark: Boolean): Modifier = t
 
 /** Fill used by the floating glass buttons and capsules. */
 fun glassFill(dark: Boolean): Color = if (dark) Color(0xB82C2C2E) else Color(0xD1FFFFFF)
+
+
+/** Counts open menus/dialogs/sheets; the app root blurs and dims the whole screen while it is above zero (same as the phone app). */
+object ScreenBlur {
+    var count by androidx.compose.runtime.mutableIntStateOf(0)
+}
+
+/** Registers a menu/dialog/sheet with [ScreenBlur] for as long as it is on screen. */
+@Composable
+fun ScreenBlurEffect(active: Boolean = true) {
+    androidx.compose.runtime.DisposableEffect(active) {
+        if (active) ScreenBlur.count++
+        onDispose { if (active) ScreenBlur.count-- }
+    }
+}
+
+/** Popup menu surface, identical to the phone app: soft shadow, translucent fill, hairline border. */
+fun Modifier.menuSurface(shape: Shape, dark: Boolean): Modifier = this
+    .shadow(
+        24.dp, shape, clip = false,
+        ambientColor = Color.Black.copy(alpha = if (dark) 0.5f else 0.12f),
+        spotColor = Color.Black.copy(alpha = if (dark) 0.6f else 0.22f)
+    )
+    .clip(shape)
+    .background(if (dark) Color(0xC7303034) else Color(0xCCF7F7F9))
+    .border(0.5.dp, if (dark) Color(0x29FFFFFF) else Color(0x14000000), shape)

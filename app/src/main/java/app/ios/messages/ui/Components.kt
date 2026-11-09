@@ -16,7 +16,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -324,29 +326,18 @@ private class MenuPosition(private val padPx: Int, startOriginX: Float) : PopupP
 @Composable
 private fun MenuCard(
     modifier: Modifier,
-    snap: Backdrop?,
-    origin: IntOffset,
     contentAlpha: () -> Float = { 1f },
     content: @Composable ColumnScope.() -> Unit
 ) {
     val dark = LocalDark.current
-    val shape = RoundedCornerShape(24.dp)
-    Box(
-        modifier
-            .shadow(
-                24.dp,
-                shape,
-                ambientColor = Color.Black.copy(alpha = 0.22f),
-                spotColor = Color.Black.copy(alpha = 0.28f)
-            )
-            .clip(shape)
-            .border(0.5.dp, if (dark) Color.White.copy(alpha = 0.13f) else Color.Black.copy(alpha = 0.06f), shape)
-    ) {
-        GlassFill(snap, origin, dark, Modifier.matchParentSize())
+    // Same surface as the phone app's GlassMenu: 24dp corners, translucent fill, hairline border.
+    Box(modifier.menuSurface(RoundedCornerShape(24.dp), dark)) {
         Column(
             Modifier
                 .width(IntrinsicSize.Max)
-                .widthIn(min = 210.dp, max = 300.dp)
+                .widthIn(min = 250.dp, max = 300.dp)
+                // Each row draws a hairline on its top edge; this nudge hides the first one under the card clip.
+                .offset(y = (-0.5).dp)
                 .graphicsLayer { alpha = contentAlpha() },
             content = content
         )
@@ -362,19 +353,17 @@ fun IosMenu(
 ) {
     val a = remember { Animatable(0f) }
     var alive by remember { mutableStateOf(false) }
-    var snap by remember { mutableStateOf<Backdrop?>(null) }
-    val host = LocalView.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    // The whole screen behind blurs and dims while a menu is open, exactly like the phone app.
+    ScreenBlurEffect(expanded)
     LaunchedEffect(expanded) {
         if (expanded) {
             runCatching { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove) }
             alive = true
-            launch { snap = captureBackdrop(host) }
             a.animateTo(1f, Motion.menuIn())
         } else if (alive) {
             a.animateTo(0f, Motion.menuOut())
             alive = false
-            snap = null
         }
     }
     if (!alive) return
@@ -385,18 +374,15 @@ fun IosMenu(
         onDismissRequest = onDismissRequest,
         properties = PopupProperties(focusable = true)
     ) {
-        val sp = rememberScreenPos()
-        Box(Modifier.padding(20.dp).screenPos(sp)) {
+        Box(Modifier.padding(20.dp)) {
             MenuCard(
                 Modifier.graphicsLayer {
-                    val s = 0.5f + 0.5f * a.value
+                    val s = 0.8f + 0.2f * a.value
                     scaleX = s
                     scaleY = s
                     alpha = (a.value * 2.4f).coerceIn(0f, 1f)
                     transformOrigin = TransformOrigin(provider.originX, provider.originY)
                 },
-                snap,
-                sp.pos,
                 contentAlpha = { ((a.value - 0.3f) / 0.5f).coerceIn(0f, 1f) },
                 content = content
             )
@@ -477,8 +463,6 @@ fun ContextOverlay(
                                 alpha = (a.value * 1.6f).coerceIn(0f, 1f)
                                 transformOrigin = TransformOrigin(if (menuAtEnd) 1f else 0f, 0f)
                             },
-                            snap,
-                            menuPos.pos,
                             contentAlpha = { ((a.value - 0.2f) / 0.6f).coerceIn(0f, 1f) },
                             content = menu
                         )
@@ -525,7 +509,10 @@ fun IosConfirm(title: String, confirmLabel: String, onConfirm: () -> Unit, onDis
     )
 }
 
-/** UIAlertController look: frosted card, centered title/message, optional content, hairline-separated actions. */
+/**
+ * Dialog in the phone app's style: a 24dp card (system "card" colour), centered text and rounded tinted buttons.
+ * The screen behind blurs and dims through [ScreenBlur], same as menus and the SIM sheet.
+ */
 @Composable
 fun IosAlert(
     title: String,
@@ -536,63 +523,50 @@ fun IosAlert(
     content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     val p = LocalPalette.current
-    val dark = LocalDark.current
-    var snap by remember { mutableStateOf<Backdrop?>(null) }
-    val host = LocalView.current
-    LaunchedEffect(Unit) { snap = captureBackdrop(host) }
+    ScreenBlurEffect()
     Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-        val sp = rememberScreenPos()
+        // The blur + dim already come from ScreenBlur; switch off the window's own dim so it is not darkened twice.
+        val win = (LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        androidx.compose.runtime.SideEffect { win?.setDimAmount(0f) }
         val a = remember { Animatable(0f) }
         LaunchedEffect(Unit) { a.animateTo(1f, Motion.menuIn()) }
-        val shape = RoundedCornerShape(14.dp)
-        Box(Modifier.screenPos(sp).width(270.dp)) {
-            Box(
-                Modifier
-                    .graphicsLayer {
-                        val s = 1.08f - 0.08f * a.value
-                        scaleX = s
-                        scaleY = s
-                        alpha = (a.value * 2f).coerceIn(0f, 1f)
-                    }
-                    .clip(shape)
-            ) {
-                GlassFill(snap, sp.pos, dark, Modifier.matchParentSize(), blurDp = 30f)
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        if (header != null) header()
-                        Text(
-                            title,
-                            color = p.label,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center
-                        )
-                        if (message != null) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(message, color = p.label, fontSize = 13.sp, textAlign = TextAlign.Center)
-                        }
-                        if (content != null) {
-                            Spacer(Modifier.height(14.dp))
-                            content()
-                        }
-                    }
-                    Hairline()
-                    if (actions.size == 2) {
-                        Row(Modifier.fillMaxWidth().height(44.dp)) {
-                            actions.forEachIndexed { i, act ->
-                                if (i > 0) Box(Modifier.width(Dp.Hairline).fillMaxHeight().background(p.separator))
-                                AlertButton(act, Modifier.weight(1f).fillMaxHeight())
-                            }
-                        }
-                    } else {
-                        actions.forEachIndexed { i, act ->
-                            if (i > 0) Hairline()
-                            AlertButton(act, Modifier.fillMaxWidth().height(44.dp))
-                        }
-                    }
+        Column(
+            Modifier
+                .width(304.dp)
+                .graphicsLayer {
+                    val s = 1.06f - 0.06f * a.value
+                    scaleX = s
+                    scaleY = s
+                    alpha = (a.value * 2f).coerceIn(0f, 1f)
+                }
+                .clip(RoundedCornerShape(24.dp))
+                .background(p.cell)
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (header != null) header()
+            Text(
+                title,
+                color = p.label,
+                style = IosType.headline,
+                textAlign = TextAlign.Center
+            )
+            if (message != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(message, color = p.secondary, style = IosType.footnote, textAlign = TextAlign.Center)
+            }
+            if (content != null) {
+                Spacer(Modifier.height(14.dp))
+                content()
+            }
+            Spacer(Modifier.height(18.dp))
+            if (actions.size == 2) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    actions.forEach { AlertButton(it, Modifier.weight(1f)) }
+                }
+            } else {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    actions.forEach { AlertButton(it, Modifier.fillMaxWidth()) }
                 }
             }
         }
@@ -602,8 +576,17 @@ fun IosAlert(
 @Composable
 private fun AlertButton(act: AlertAction, modifier: Modifier) {
     val p = LocalPalette.current
+    val src = remember { MutableInteractionSource() }
     Box(
-        modifier.then(if (act.enabled) Modifier.iosClickable(act.onClick) else Modifier),
+        modifier
+            .height(44.dp)
+            .then(if (act.enabled) Modifier.springPress(src, 0.96f) else Modifier)
+            .clip(RoundedCornerShape(12.dp))
+            .background(p.fieldFill)
+            .then(
+                if (act.enabled) Modifier.clickable(interactionSource = src, indication = null, onClick = act.onClick)
+                else Modifier
+            ),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -613,8 +596,9 @@ private fun AlertButton(act: AlertAction, modifier: Modifier) {
                 act.destructive -> Red
                 else -> p.blue
             },
-            fontSize = 17.sp,
-            fontWeight = if (act.bold) FontWeight.SemiBold else FontWeight.Normal,
+            style = IosType.callout,
+            fontSize = 16.sp,
+            fontWeight = if (act.bold) FontWeight.SemiBold else FontWeight.Medium,
             textAlign = TextAlign.Center,
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 8.dp)
@@ -622,7 +606,7 @@ private fun AlertButton(act: AlertAction, modifier: Modifier) {
     }
 }
 
-/** UITextField inside an alert. */
+/** Text field inside a dialog: same 46dp rounded "fill" field as the phone app. */
 @Composable
 fun IosField(
     value: String,
@@ -635,23 +619,23 @@ fun IosField(
     Box(
         modifier
             .fillMaxWidth()
-            .height(32.dp)
-            .clip(RoundedCornerShape(7.dp))
+            .height(46.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(p.fieldFill)
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 14.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         androidx.compose.foundation.text.BasicTextField(
             value = value,
             onValueChange = onChange,
             singleLine = true,
-            textStyle = TextStyle(fontSize = 15.sp, color = p.label),
+            textStyle = IosType.body.copy(color = p.label),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(p.blue),
             visualTransformation = if (password) androidx.compose.ui.text.input.PasswordVisualTransformation()
             else androidx.compose.ui.text.input.VisualTransformation.None,
             modifier = Modifier.fillMaxWidth()
         )
-        if (value.isEmpty()) Text(placeholder, color = p.secondary, fontSize = 15.sp)
+        if (value.isEmpty()) Text(placeholder, color = p.secondary, style = IosType.body)
     }
 }
 
@@ -671,6 +655,12 @@ fun Modifier.menuClickable(onClick: () -> Unit): Modifier = composed {
         .clickable(interactionSource = src, indication = null, onClick = onClick)
 }
 
+/** Hairline on the top edge of a menu row (the phone app separates every row like this). */
+private fun Modifier.menuSeparator(color: Color): Modifier = drawBehind {
+    val inset = 18.dp.toPx()
+    drawRect(color, topLeft = Offset(inset, 0f), size = Size(size.width - 2 * inset, 0.5.dp.toPx()))
+}
+
 @Composable
 fun IosMenuItem(
     text: @Composable () -> Unit,
@@ -679,11 +669,16 @@ fun IosMenuItem(
 ) {
     val p = LocalPalette.current
     Row(
-        Modifier.fillMaxWidth().menuClickable(onClick).heightIn(min = 46.dp).padding(horizontal = 16.dp),
+        Modifier
+            .fillMaxWidth()
+            .menuClickable(onClick)
+            .menuSeparator(p.separator)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         CompositionLocalProvider(LocalContentColor provides p.label) {
-            ProvideTextStyle(TextStyle(fontSize = 17.sp)) {
+            ProvideTextStyle(IosType.body) {
                 Box(Modifier.weight(1f)) { text() }
             }
         }
@@ -697,7 +692,7 @@ fun IosMenuItem(
 @Composable
 fun rtlSign(): Float = if (androidx.compose.ui.platform.LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
 
-/** iPhone-style menu row: checkmark column, optional icon, label. No hairlines between rows. */
+/** Phone-style menu row: checkmark column, label, icon at the end. */
 @Composable
 fun IosMenuRow(
     checked: Boolean = false,
@@ -708,23 +703,29 @@ fun IosMenuRow(
 ) {
     val p = LocalPalette.current
     Row(
-        Modifier.fillMaxWidth().menuClickable(onClick).heightIn(min = 46.dp).padding(horizontal = 16.dp),
+        Modifier
+            .fillMaxWidth()
+            .menuClickable(onClick)
+            .menuSeparator(p.separator)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (checkColumn) {
-            Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterStart) {
-                if (checked) CheckMark(p.label, Modifier.size(15.dp))
+            Box(Modifier.width(22.dp), contentAlignment = Alignment.CenterStart) {
+                if (checked) CheckMark(p.label, Modifier.size(16.dp))
             }
-        }
-        if (icon != null) {
-            Box(Modifier.width(34.dp), contentAlignment = Alignment.CenterStart) { icon() }
+            Spacer(Modifier.width(10.dp))
         }
         CompositionLocalProvider(LocalContentColor provides p.label) {
-            ProvideTextStyle(TextStyle(fontSize = 17.sp)) {
+            ProvideTextStyle(IosType.body) {
                 Box(Modifier.weight(1f)) { label() }
             }
         }
-        Spacer(Modifier.width(8.dp))
+        if (icon != null) {
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterEnd) { icon() }
+        }
     }
 }
 
@@ -734,19 +735,19 @@ fun IosMenuHeader(text: String) {
     Text(
         text,
         color = p.secondary,
-        fontSize = 15.sp,
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+        style = IosType.footnote,
+        modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 4.dp)
     )
 }
 
+/** Section break inside a menu: a thin tinted band, like iOS. */
 @Composable
 fun IosMenuDivider() {
     val dark = LocalDark.current
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp)
-            .height(1.dp)
-            .background(if (dark) Color(0x33FFFFFF) else Color(0x1F000000))
+            .height(6.dp)
+            .background(if (dark) Color(0x24FFFFFF) else Color(0x12000000))
     )
 }

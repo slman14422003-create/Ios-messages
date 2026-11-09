@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -180,10 +181,8 @@ fun ConversationsScreen(
                     { selBarH }, { if (selecting) 1f else 0f },
                     p.bg, p.bar.copy(alpha = 0.7f), blurPx
                 ),
-            contentPadding = PaddingValues(top = with(LocalDensity.current) { headerH.toDp() }.coerceAtLeast(top + 110.dp) + 4.dp, bottom = bottom + if (selecting) 56.dp else 0.dp)
+            contentPadding = PaddingValues(top = with(LocalDensity.current) { headerH.toDp() }.coerceAtLeast(top + 110.dp) + 4.dp, bottom = bottom + if (selecting) 56.dp else 96.dp)
         ) {
-            item(key = "search") { SearchField(query) { query = it } }
-
             if (!hasPermission) {
                 item(key = "perm") {
                     Banner(
@@ -526,6 +525,26 @@ fun ConversationsScreen(
                 }
             }
         }
+
+        if (!selecting) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(bottom + 96.dp)
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, p.bg.copy(alpha = 0.92f))))
+            )
+            GlassSearchBar(
+                query,
+                { query = it },
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            )
+        }
     }
 }
 
@@ -613,35 +632,44 @@ private fun PinTile(
     }
 }
 
+/** The phone app's bottom search pill: 62dp glass capsule floating above the list. */
 @Composable
-private fun SearchField(value: String, onChange: (String) -> Unit) {
+private fun GlassSearchBar(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
+    val dark = LocalDark.current
     Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .height(36.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(p.fieldFill)
-            .padding(horizontal = 8.dp),
+        modifier
+            .height(62.dp)
+            .liquidGlass(RoundedCornerShape(31.dp), glassFill(dark), dark)
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SearchIcon(p.secondary)
-        Spacer(Modifier.width(6.dp))
+        SearchIcon(p.secondary, Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
         BasicTextField(
             value = value,
             onValueChange = onChange,
             singleLine = true,
-            textStyle = TextStyle(fontSize = 17.sp, color = p.label),
+            textStyle = IosType.body.copy(color = p.label),
             cursorBrush = SolidColor(p.blue),
             modifier = Modifier.weight(1f),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) Text(stringResource(R.string.search), color = p.secondary, fontSize = 17.sp)
+                    if (value.isEmpty()) Text(stringResource(R.string.search), color = p.secondary, style = IosType.body)
                     inner()
                 }
             }
         )
+        if (value.isNotEmpty()) {
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(p.secondary.copy(alpha = 0.7f))
+                    .plainClickable { onChange("") },
+                contentAlignment = Alignment.Center
+            ) { Text("\u2715", color = p.bg, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+        }
     }
 }
 

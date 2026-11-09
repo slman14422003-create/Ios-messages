@@ -389,7 +389,25 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         }
     }
 
+    // Menus, dialogs and sheets raise ScreenBlur; the whole app blurs and dims behind them (same as the phone app).
+    val menuOpen = app.ios.messages.ui.ScreenBlur.count > 0
+    val menuBlur by androidx.compose.animation.core.animateFloatAsState(
+        if (menuOpen) Motion.MenuBlur else 0f,
+        androidx.compose.animation.core.tween(Motion.MenuMs, easing = Motion.MenuEase),
+        label = "menuBlur"
+    )
+    val menuDim by androidx.compose.animation.core.animateFloatAsState(
+        if (menuOpen) Motion.MenuDim else 0f,
+        androidx.compose.animation.core.tween(Motion.MenuMs, easing = Motion.MenuEase),
+        label = "menuDim"
+    )
     Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        Modifier.fillMaxSize().graphicsLayer {
+            val r = menuBlur
+            renderEffect = if (r > 0.5f) androidx.compose.ui.graphics.BlurEffect(r, r, androidx.compose.ui.graphics.TileMode.Clamp) else null
+        }
+    ) {
         app.ios.messages.ui.BlurWarmUp()
         Box(Modifier.fillMaxSize().graphicsLayer {
             val pr = maxOf(progress.value, settingsProgress.value)
@@ -601,6 +619,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 onSkip = { vm.dismissSetup() }
             )
         }
+    }
+    Box(Modifier.fillMaxSize().graphicsLayer { alpha = menuDim }.background(Color.Black))
     }
 }
 
