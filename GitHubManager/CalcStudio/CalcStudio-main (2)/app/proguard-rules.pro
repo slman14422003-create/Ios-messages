@@ -1,9 +1,0 @@
--keep class com.calc.app.** { *; }
--keep class com.google.ai.edge.litertlm.** { *; }
--keepclassmembers class com.google.ai.edge.litertlm.** { *; }
--dontwarn com.google.ai.edge.litertlm.**
--dontwarn kotlinx.coroutines.**
--dontwarn org.apache.commons.math3.**
--dontwarn ch.obermuhlner.**
--keep class ch.obermuhlner.math.big.** { *; }
--keep class org.apache.commons.math3.stat.** { *; }
