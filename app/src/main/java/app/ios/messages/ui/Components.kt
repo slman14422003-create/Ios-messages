@@ -274,7 +274,7 @@ fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, co
     Box(
         modifier
             .size(size)
-            .springPress(src, 0.86f)
+            .springPress(src, 0.93f)
             .liquidGlass(CircleShape, glassFill(dark), dark)
             .clickable(interactionSource = src, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
@@ -290,7 +290,7 @@ fun GlassPill(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, cont
     val shape = RoundedCornerShape(50)
     Box(
         modifier
-            .springPress(src, 0.94f)
+            .springPress(src, 0.93f)
             .liquidGlass(shape, glassFill(dark), dark)
             .then(if (onClick != null) Modifier.clickable(interactionSource = src, indication = null, onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center

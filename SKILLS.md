@@ -322,3 +322,17 @@
 
 ### Next ideas
 - Restyle the search field and pinned avatar tiles as glass, add a soft fade under the bar (fade = true) if a harder edge is not wanted
+
+## Task: fixed header in the conversation list, phone-project glass look
+
+### Done
+- ui/ConversationsScreen.kt: the large "Messages" title moved out of the list into the pinned header (buttons row + title), so nothing in the header scrolls; the list scrolls underneath a live blur bar that is always on (amount 1); small centered title and hairline removed; list top padding follows the measured header height
+- Buttons use the phone app sizes and spacing: Edit capsule and settings / compose circles 44dp, 10dp between circles, 16dp side padding
+- ui/Glass.kt: liquidGlass now matches the phone app glass (flat translucent fill, 0.5dp border, 8dp shadow); glassFill = 0xB82C2C2E dark / 0xD1FFFFFF light
+- ui/Components.kt: GlassCircle and GlassPill press spring 0.93 like the phone app
+
+### Not verified
+- No compiler or device in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+### Next ideas
+- Same fixed header for the Recently Deleted / filtered views is automatic (title follows the filter); search field could also be pinned under the header if wanted

@@ -176,23 +176,12 @@ fun ConversationsScreen(
                 .fillMaxSize()
                 .liveBlurEdges(
                     liveTop,
-                    { headerH }, { barAmount },
+                    { headerH }, { 1f },
                     { selBarH }, { if (selecting) 1f else 0f },
                     p.bg, p.bar.copy(alpha = 0.7f), blurPx
                 ),
-            contentPadding = PaddingValues(top = top + 52.dp, bottom = bottom + if (selecting) 56.dp else 0.dp)
+            contentPadding = PaddingValues(top = with(LocalDensity.current) { headerH.toDp() }.coerceAtLeast(top + 110.dp) + 4.dp, bottom = bottom + if (selecting) 56.dp else 0.dp)
         ) {
-            item(key = "title") {
-                Text(
-                    title,
-                    color = p.label,
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .padding(start = 16.dp, top = 2.dp, bottom = 6.dp)
-                        .graphicsLayer { alpha = (1f - collapse * 1.6f).coerceIn(0f, 1f) }
-                )
-            }
             item(key = "search") { SearchField(query) { query = it } }
 
             if (!hasPermission) {
@@ -422,10 +411,10 @@ fun ConversationsScreen(
                 .onSizeChanged { headerH = it.height.toFloat() }
                 .statusBarsPadding()
         ) {
-            Box(Modifier.fillMaxWidth().height(52.dp)) {
+            Box(Modifier.fillMaxWidth().height(60.dp)) {
                 Box(Modifier.align(Alignment.CenterStart)) {
                     GlassPill(
-                        Modifier.padding(start = 12.dp).height(42.dp),
+                        Modifier.padding(start = 16.dp).height(44.dp),
                         onClick = { if (selecting) endSelecting() else editMenu = true }
                     ) {
                         Text(
@@ -433,7 +422,7 @@ fun ConversationsScreen(
                             color = p.blue,
                             fontSize = 17.sp,
                             fontWeight = if (selecting) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.padding(horizontal = 18.dp)
+                            modifier = Modifier.padding(horizontal = 20.dp)
                         )
                     }
                     IosMenu(expanded = editMenu, onDismissRequest = { editMenu = false }, originX = 0.1f) {
@@ -443,20 +432,13 @@ fun ConversationsScreen(
                         )
                     }
                 }
-                Text(
-                    title,
-                    color = p.label,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.align(Alignment.Center).graphicsLayer { alpha = ((collapse - 0.45f) / 0.55f).coerceIn(0f, 1f) }
-                )
                 if (!selecting) {
                     Row(
                         Modifier.align(Alignment.CenterEnd),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box {
-                            GlassCircle(42.dp, Modifier.padding(horizontal = 4.dp), onClick = { filterMenu = true }) { GearIcon(p.blue) }
+                            GlassCircle(44.dp, Modifier.padding(end = 10.dp), onClick = { filterMenu = true }) { GearIcon(p.blue) }
                             IosMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, originX = 0.9f) {
                                 IosMenuRow(
                                     checked = filterIdx == 0,
@@ -494,11 +476,17 @@ fun ConversationsScreen(
                                 ) { Text(stringResource(R.string.settings)) }
                             }
                         }
-                        GlassCircle(42.dp, Modifier.padding(start = 4.dp, end = 12.dp), onClick = onCompose) { ComposeIcon(p.blue) }
+                        GlassCircle(44.dp, Modifier.padding(end = 16.dp), onClick = onCompose) { ComposeIcon(p.blue) }
                     }
                 }
             }
-            Hairline(Modifier.graphicsLayer { alpha = barAmount })
+            Text(
+                title,
+                color = p.label,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 16.dp, top = 0.dp, bottom = 8.dp)
+            )
         }
 
         if (selecting) {

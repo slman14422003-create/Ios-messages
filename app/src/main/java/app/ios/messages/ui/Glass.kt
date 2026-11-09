@@ -572,29 +572,16 @@ fun Modifier.springPress(src: androidx.compose.foundation.interaction.Interactio
     this.graphicsLayer { scaleX = s; scaleY = s }
 }
 
-/** Liquid-glass surface: soft shadow, translucent fill, bright top edge that fades toward the bottom. */
+/** Glass surface from the phone app: soft shadow, translucent fill, hairline border. */
 fun Modifier.liquidGlass(shape: Shape, fill: Color, dark: Boolean): Modifier = this
     .shadow(
-        14.dp, shape, clip = false,
-        ambientColor = Color.Black.copy(alpha = if (dark) 0.40f else 0.10f),
-        spotColor = Color.Black.copy(alpha = if (dark) 0.50f else 0.20f)
+        8.dp, shape, clip = false,
+        ambientColor = Color.Black.copy(alpha = if (dark) 0.35f else 0.08f),
+        spotColor = Color.Black.copy(alpha = if (dark) 0.50f else 0.18f)
     )
     .clip(shape)
     .background(fill)
-    .background(
-        Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = if (dark) 0.16f else 0.60f), Color.Transparent, Color.Black.copy(alpha = if (dark) 0.10f else 0.04f))
-        ),
-        shape
-    )
-    .border(
-        0.6.dp,
-        Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = if (dark) 0.42f else 0.95f), Color.White.copy(alpha = if (dark) 0.06f else 0.22f))
-        ),
-        shape
-    )
-
+    .border(0.5.dp, if (dark) Color(0x29FFFFFF) else Color(0x14000000), shape)
 
 /** Fill used by the floating glass buttons and capsules. */
-fun glassFill(dark: Boolean): Color = if (dark) Color(0xB3414145) else Color(0xC2FFFFFF)
+fun glassFill(dark: Boolean): Color = if (dark) Color(0xB82C2C2E) else Color(0xD1FFFFFF)
