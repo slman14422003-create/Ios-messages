@@ -291,3 +291,20 @@
 
 ### Next ideas
 - Apply GlassPill/GlassCircle to the new message and settings screens, tune avatar tint colors against the reference, optional ScreenBlur dimming behind context menus
+
+## Task: SIM chip overlap, live blur bars, notification hang
+
+### Done
+- ui/ChatScreen.kt: the SIM chip (e.g. Syriatel) now sits inside the header column right under the name pill instead of being pinned to the bottom of the bar, so it can no longer touch the pill or the "Text Message • SMS" line; header height 142dp
+- data/Prefs.kt: smoothMode now uses a new key (smooth_mode2) with default false, so the list and chat bars use real live blur by default (the old default was static bars); the switch in Privacy settings still turns cheap bars back on
+- Notifier.kt (notification hang hardening):
+  - dynamic shortcut is pushed at most once per conversation every 30 minutes (it used to be pushed on every message, an expensive system call)
+  - contact photo is decoded at most about 128px before becoming the notification icon (was full size)
+  - group summary count comes from the in-memory history instead of reading all active notifications; syncRead skips the active-notification binder call when nothing was posted
+  - notify and summary calls wrapped in try/catch with a log line
+
+### Not verified
+- No compiler and no device in the sandbox: the notification hang cause is not confirmed. If it still happens, send a logcat taken while a message arrives (filter: IosMessages, Messages, ANR)
+
+### Next ideas
+- If the hang remains, test with Settings > smooth mode on to rule out live blur cost, and check the receiver thread with StrictMode

@@ -289,7 +289,7 @@ private fun ChatScreenBody(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var inputH by remember { mutableIntStateOf(with(density) { (66.dp + navBottom).roundToPx() }) }
     val statusH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val barH = 128.dp
+    val barH = 142.dp
     val tick = rememberTick()
     val scope = rememberCoroutineScope()
     val rdir = rtlSign()
@@ -441,46 +441,46 @@ private fun ChatScreenBody(
                                 ChevronRight(p.tertiary, width = 6, height = 11, stroke = 1.8f)
                             }
                         }
-                    }
-                    val headerSim = sims.firstOrNull { it.subId == simSel }
-                    if (headerSim != null) {
-                        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)) {
-                            Row(
-                                Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .plainClickable { if (sims.size > 1) simMenu = true }
-                                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val dotC by animateColorAsState(Color(headerSim.color), label = "dot")
-                                Box(Modifier.size(6.dp).clip(CircleShape).background(dotC))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    headerSim.label,
-                                    color = p.secondary,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 160.dp)
-                                )
-                                if (sims.size > 1) {
-                                    Spacer(Modifier.width(3.dp))
-                                    ChevronRight(p.secondary, width = 5, height = 8, stroke = 1.2f, modifier = Modifier.graphicsLayer { rotationZ = 90f })
-                                }
-                            }
-                            IosMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
-                                sims.forEach { sm ->
-                                    IosMenuItem(
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                SimBadge(sm.label, 22.dp)
-                                                Spacer(Modifier.width(12.dp))
-                                                Text(sm.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            }
-                                        },
-                                        onClick = { simMenu = false; picked = sm.subId; onPickSim(sm.subId) },
-                                        trailingIcon = { if (sm.subId == simSel) CheckMark(p.label, Modifier.size(16.dp)) }
+                        val headerSim = sims.firstOrNull { it.subId == simSel }
+                        if (headerSim != null) {
+                            Box(Modifier.padding(top = 4.dp)) {
+                                Row(
+                                    Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .plainClickable { if (sims.size > 1) simMenu = true }
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val dotC by animateColorAsState(Color(headerSim.color), label = "dot")
+                                    Box(Modifier.size(6.dp).clip(CircleShape).background(dotC))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        headerSim.label,
+                                        color = p.secondary,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 160.dp)
                                     )
+                                    if (sims.size > 1) {
+                                        Spacer(Modifier.width(3.dp))
+                                        ChevronRight(p.secondary, width = 5, height = 8, stroke = 1.2f, modifier = Modifier.graphicsLayer { rotationZ = 90f })
+                                    }
+                                }
+                                IosMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
+                                    sims.forEach { sm ->
+                                        IosMenuItem(
+                                            text = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    SimBadge(sm.label, 22.dp)
+                                                    Spacer(Modifier.width(12.dp))
+                                                    Text(sm.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                            },
+                                            onClick = { simMenu = false; picked = sm.subId; onPickSim(sm.subId) },
+                                            trailingIcon = { if (sm.subId == simSel) CheckMark(p.label, Modifier.size(16.dp)) }
+                                        )
+                                    }
                                 }
                             }
                         }

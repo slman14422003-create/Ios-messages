@@ -49,6 +49,12 @@ object Notifier {
 
     @Volatile private var channelsReady = false
 
+    /** False once a check found no active notification: lets syncRead skip the binder call that returns every posted notification. */
+    @Volatile private var maybeActive = true
+
+    private val shortcutAt = HashMap<String, Long>()
+    private const val SHORTCUT_GAP_MS = 30L * 60L * 1000L
+
     /** Same number written two ways must map to the same notification id. */
     private fun nid(address: String): Int = Prefs.keyOf(address).hashCode()
 
@@ -140,10 +146,16 @@ object Notifier {
             ArrayList(l)
         }
 
+        maybeActive = true
         val photoIcon = avatar(ctx, repo.contactPhoto(address))
         val sender = Person.Builder().setName(title).setKey(key).apply { if (photoIcon != null) setIcon(photoIcon) }.build()
         val shortcutId = "chat_" + key
-        publishShortcut(ctx, shortcutId, title, sender, photoIcon, address)
+        val nowMs = System.currentTimeMillis()
+        val pushShortcut = synchronized(shortcutAt) {
+            val last = shortcutAt[shortcutId] ?: 0L
+            if (nowMs - last > SHORTCUT_GAP_MS) { shortcutAt[shortcutId] = nowMs; true } else false
+        }
+        if (pushShortcut) publishShortcut(ctx, shortcutId, title, sender, photoIcon, address)
         val me = Person.Builder().setName(lc.getString(R.string.notif_me)).build()
         val style = Notification.MessagingStyle(me)
         lines.forEach { (text, time) -> style.addMessage(text, time, sender) }
@@ -223,14 +235,24 @@ object Notifier {
             b.addAction(action)
         }
 
-        nm.notify(id, b.build())
-        postSummary(ctx, nm)
+        try {
+            nm.notify(id, b.build())
+            postSummary(ctx, nm)
+        } catch (e: Throwable) {
+            android.util.Log.e("IosMessages", "notify failed", e)
+        }
     }
 
     private fun avatar(ctx: Context, photo: String?): Icon? {
         if (photo.isNullOrEmpty()) return null
         return runCatching {
-            ctx.contentResolver.openInputStream(Uri.parse(photo))?.use { BitmapFactory.decodeStream(it) }
+            val uri = Uri.parse(photo)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= 128 && bounds.outHeight / (sample * 2) >= 128) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
                 ?.let { Icon.createWithBitmap(it) }
         }.getOrNull()
     }
@@ -260,7 +282,7 @@ object Notifier {
         )
 
     private fun postSummary(ctx: Context, nm: NotificationManager) {
-        val active = nm.activeNotifications.count { it.id != SUMMARY_ID && it.notification.group == GROUP }
+        val active = synchronized(history) { history.size }
         if (active < 2) {
             if (active == 0) nm.cancel(SUMMARY_ID)
             return
@@ -300,8 +322,12 @@ object Notifier {
     fun syncRead(ctx: Context, readAddresses: List<String>) {
         if (readAddresses.isEmpty()) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (!maybeActive) return
         val activeIds = nm.activeNotifications.map { it.id }.toSet()
-        if (activeIds.isEmpty()) return
+        if (activeIds.isEmpty()) {
+            maybeActive = false
+            return
+        }
         var changed = false
         readAddresses.forEach { a ->
             if (nid(a) in activeIds) {

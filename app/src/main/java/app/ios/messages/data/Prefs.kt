@@ -32,8 +32,8 @@ class Prefs(ctx: Context) {
 
     /** Smooth mode: lists use cheap static bars instead of live blur. */
     var smoothMode: Boolean
-        get() = sp.getBoolean("smooth_mode", true)
-        set(v) { sp.edit().putBoolean("smooth_mode", v).apply() }
+        get() = sp.getBoolean("smooth_mode2", false)
+        set(v) { sp.edit().putBoolean("smooth_mode2", v).apply() }
 
     var sentSound: Boolean
         get() = sp.getBoolean("sent_sound", true)
