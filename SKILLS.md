@@ -308,3 +308,17 @@
 
 ### Next ideas
 - If the hang remains, test with Settings > smooth mode on to rule out live blur cost, and check the receiver thread with StrictMode
+
+## Task: pinned blurred top bar in the conversation list, prettier buttons and capsules
+
+### Done
+- ui/ConversationsScreen.kt: the bar now fades in after about 10dp of scroll (barAmount) instead of over the full title height, so the large title never shows half-blurred behind the buttons; the large title fades out as it scrolls, the small centered title fades in later, the hairline follows the bar
+- Edit capsule is 42dp tall, settings and compose circles are 42dp, spacing evened out
+- ui/Glass.kt: glassFill(dark) with brighter fills, stronger top sheen, soft bottom shade and a brighter rim for liquidGlass
+- ui/Components.kt: GlassCircle and GlassPill use glassFill
+
+### Not verified
+- No compiler or device in the sandbox: build with the GitHub Actions workflow and send the log if anything fails
+
+### Next ideas
+- Restyle the search field and pinned avatar tiles as glass, add a soft fade under the bar (fade = true) if a harder edge is not wanted

@@ -275,7 +275,7 @@ fun GlassCircle(size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit, co
         modifier
             .size(size)
             .springPress(src, 0.86f)
-            .liquidGlass(CircleShape, p.glass, dark)
+            .liquidGlass(CircleShape, glassFill(dark), dark)
             .clickable(interactionSource = src, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) { content() }
@@ -291,7 +291,7 @@ fun GlassPill(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, cont
     Box(
         modifier
             .springPress(src, 0.94f)
-            .liquidGlass(shape, p.glass, dark)
+            .liquidGlass(shape, glassFill(dark), dark)
             .then(if (onClick != null) Modifier.clickable(interactionSource = src, indication = null, onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) { content() }

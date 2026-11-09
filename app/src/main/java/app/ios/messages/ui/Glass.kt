@@ -583,14 +583,18 @@ fun Modifier.liquidGlass(shape: Shape, fill: Color, dark: Boolean): Modifier = t
     .background(fill)
     .background(
         Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = if (dark) 0.10f else 0.55f), Color.Transparent)
+            listOf(Color.White.copy(alpha = if (dark) 0.16f else 0.60f), Color.Transparent, Color.Black.copy(alpha = if (dark) 0.10f else 0.04f))
         ),
         shape
     )
     .border(
         0.6.dp,
         Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = if (dark) 0.28f else 0.9f), Color.White.copy(alpha = if (dark) 0.05f else 0.25f))
+            listOf(Color.White.copy(alpha = if (dark) 0.42f else 0.95f), Color.White.copy(alpha = if (dark) 0.06f else 0.22f))
         ),
         shape
     )
+
+
+/** Fill used by the floating glass buttons and capsules. */
+fun glassFill(dark: Boolean): Color = if (dark) Color(0xB3414145) else Color(0xC2FFFFFF)

@@ -146,6 +146,13 @@ fun ConversationsScreen(
             else (listState.firstVisibleItemScrollOffset / collapsePx).coerceIn(0f, 1f)
         }
     }
+    val barRampPx = with(LocalDensity.current) { 10.dp.toPx() }
+    val barAmount by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex >= 1) 1f
+            else (listState.firstVisibleItemScrollOffset / barRampPx).coerceIn(0f, 1f)
+        }
+    }
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val liveTop = remember { LiveBlur() }
@@ -169,7 +176,7 @@ fun ConversationsScreen(
                 .fillMaxSize()
                 .liveBlurEdges(
                     liveTop,
-                    { headerH }, { collapse },
+                    { headerH }, { barAmount },
                     { selBarH }, { if (selecting) 1f else 0f },
                     p.bg, p.bar.copy(alpha = 0.7f), blurPx
                 ),
@@ -181,7 +188,9 @@ fun ConversationsScreen(
                     color = p.label,
                     fontSize = 34.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 6.dp)
+                    modifier = Modifier
+                        .padding(start = 16.dp, top = 2.dp, bottom = 6.dp)
+                        .graphicsLayer { alpha = (1f - collapse * 1.6f).coerceIn(0f, 1f) }
                 )
             }
             item(key = "search") { SearchField(query) { query = it } }
@@ -416,7 +425,7 @@ fun ConversationsScreen(
             Box(Modifier.fillMaxWidth().height(52.dp)) {
                 Box(Modifier.align(Alignment.CenterStart)) {
                     GlassPill(
-                        Modifier.padding(start = 12.dp),
+                        Modifier.padding(start = 12.dp).height(42.dp),
                         onClick = { if (selecting) endSelecting() else editMenu = true }
                     ) {
                         Text(
@@ -424,7 +433,7 @@ fun ConversationsScreen(
                             color = p.blue,
                             fontSize = 17.sp,
                             fontWeight = if (selecting) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(horizontal = 18.dp)
                         )
                     }
                     IosMenu(expanded = editMenu, onDismissRequest = { editMenu = false }, originX = 0.1f) {
@@ -439,7 +448,7 @@ fun ConversationsScreen(
                     color = p.label,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.align(Alignment.Center).graphicsLayer { alpha = collapse }
+                    modifier = Modifier.align(Alignment.Center).graphicsLayer { alpha = ((collapse - 0.45f) / 0.55f).coerceIn(0f, 1f) }
                 )
                 if (!selecting) {
                     Row(
@@ -447,7 +456,7 @@ fun ConversationsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box {
-                            GlassCircle(40.dp, Modifier.padding(horizontal = 3.dp), onClick = { filterMenu = true }) { GearIcon(p.blue) }
+                            GlassCircle(42.dp, Modifier.padding(horizontal = 4.dp), onClick = { filterMenu = true }) { GearIcon(p.blue) }
                             IosMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, originX = 0.9f) {
                                 IosMenuRow(
                                     checked = filterIdx == 0,
@@ -485,11 +494,11 @@ fun ConversationsScreen(
                                 ) { Text(stringResource(R.string.settings)) }
                             }
                         }
-                        GlassCircle(40.dp, Modifier.padding(start = 3.dp, end = 12.dp), onClick = onCompose) { ComposeIcon(p.blue) }
+                        GlassCircle(42.dp, Modifier.padding(start = 4.dp, end = 12.dp), onClick = onCompose) { ComposeIcon(p.blue) }
                     }
                 }
             }
-            Hairline(Modifier.graphicsLayer { alpha = collapse })
+            Hairline(Modifier.graphicsLayer { alpha = barAmount })
         }
 
         if (selecting) {
