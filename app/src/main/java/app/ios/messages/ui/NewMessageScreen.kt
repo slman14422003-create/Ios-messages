@@ -83,12 +83,9 @@ fun NewMessageScreen(
     val sorted = remember(contacts) {
         contacts.sortedWith(compareBy<Contact>({ letterOf(it.name) == "#" }, { it.name.lowercase() }))
     }
-    val filtered = remember(sorted, q) {
-        if (q.isEmpty()) sorted
-        else sorted.filter {
-            it.name.contains(q, true) || (digits.isNotEmpty() && it.number.filter { ch -> ch.isDigit() }.contains(digits))
-        }
-    }
+    val filtered = remember(sorted, q) { app.ios.messages.data.Intel.filterContacts(sorted, q) }
+    val clipNumber = rememberClipboardNumber()
+    val clipShown = q.isEmpty() && clipNumber != null
     val rows = remember(filtered) {
         val out = ArrayList<NmRow>()
         var last = ""
@@ -174,6 +171,24 @@ fun NewMessageScreen(
                         }
                     }
                 }
+                if (clipShown && clipNumber != null) {
+                    item(key = "clip") {
+                        Box(Modifier.fillMaxWidth().iosClickable({ onPick(clipNumber, null) })) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Avatar("", 40.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(clipNumber, color = p.label, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                                    Text(stringResource(R.string.clip_number_title), color = p.secondary, fontSize = 14.sp)
+                                }
+                            }
+                            Hairline(Modifier.align(Alignment.BottomStart).padding(start = 68.dp))
+                        }
+                    }
+                }
                 rows.forEachIndexed { i, r ->
                     when (r) {
                         is NmRow.Header -> stickyHeader(key = "h${r.letter}") {
@@ -241,7 +256,7 @@ fun NewMessageScreen(
                             modifier = Modifier
                                 .plainClickable {
                                     val idx = rows.indexOfFirst { it is NmRow.Header && it.letter == l }
-                                    if (idx >= 0) scope.launch { listState.scrollToItem(idx) }
+                                    if (idx >= 0) scope.launch { listState.scrollToItem(idx + (if (clipShown) 1 else 0)) }
                                 }
                                 .padding(horizontal = 6.dp, vertical = 1.dp)
                         )

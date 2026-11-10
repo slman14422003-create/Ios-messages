@@ -313,6 +313,11 @@ private fun ChatScreenBody(
         }
     }
 
+    val replyIds = remember(messages, address) {
+        app.ios.messages.data.SmartReply.suggest(messages.lastOrNull()?.takeIf { !it.mine }?.body, address)
+    }
+    val replies = replyIds.map { stringResource(it) }
+
     Box(Modifier.fillMaxSize().background(p.bg).imePadding()) {
         LazyColumn(
             state = listState,
@@ -544,6 +549,12 @@ private fun ChatScreenBody(
         }
 
         Box(Modifier.align(Alignment.BottomCenter)) {
+          Column {
+            SmartReplyBar(
+                replies = replies,
+                visible = text.isEmpty() && attach == null && !emojiOpen && !searchOpen,
+                onPick = { text = it }
+            )
             if (searchOpen) ChatSearchBar(
                 query = searchQuery,
                 onQuery = { searchQuery = it; searchPos = 0 },
@@ -599,6 +610,7 @@ private fun ChatScreenBody(
                     }
                 }
             )
+          }
         }
     }
 }
@@ -733,6 +745,8 @@ private fun BubbleRow(
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val thud = rememberThud()
+    val otpCode = remember(b.m.body) { app.ios.messages.data.Otp.extract(b.m.body) }
+    val bodyNumbers = remember(b.m.body) { app.ios.messages.data.Intel.numbers(b.m.body) }
     var menu by remember { mutableStateOf(false) }
     val maxW = (LocalConfiguration.current.screenWidthDp * 0.76f).dp
     val boundsRef = remember { arrayOfNulls<Rect>(1) }
@@ -815,6 +829,24 @@ private fun BubbleRow(
                     clipboard.setText(AnnotatedString(b.m.body))
                 }
             )
+            otpCode?.let { code ->
+                IosMenuItem(
+                    text = { Text(stringResource(R.string.copy_code_item)) },
+                    onClick = {
+                        menu = false
+                        app.ios.messages.data.Intel.copy(ctx, code)
+                    }
+                )
+            }
+            bodyNumbers.firstOrNull()?.let { num ->
+                IosMenuItem(
+                    text = { Text(stringResource(R.string.copy_number)) },
+                    onClick = {
+                        menu = false
+                        app.ios.messages.data.Intel.copy(ctx, num)
+                    }
+                )
+            }
             IosMenuItem(
                 text = { Text(stringResource(R.string.share)) },
                 onClick = {

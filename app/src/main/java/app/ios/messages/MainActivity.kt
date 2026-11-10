@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Transitions.install(this)
+        SmoothDisplay.apply(this)
         // Block screenshots / screen recording / app-switcher preview, and ignore taps while another
         // app draws over us (tapjacking).
         applyScreenSecure(Prefs(this).screenSecure)

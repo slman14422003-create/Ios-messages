@@ -115,6 +115,7 @@ fun ConversationsScreen(
     val rowCoords = remember { HashMap<Long, androidx.compose.ui.layout.LayoutCoordinates>() }
 
     val filtered = remember(conversations, filterIdx, simFilter, query) {
+        val nq = if (query.isBlank()) "" else app.ios.messages.data.Intel.normalize(query.trim())
         if (filterIdx == 4) emptyList() else conversations.filter { c ->
             val pass = when (filterIdx) {
                 1 -> c.unread > 0
@@ -122,7 +123,8 @@ fun ConversationsScreen(
                 3 -> c.subId == simFilter
                 else -> true
             }
-            pass && (query.isBlank() || c.name.contains(query, true) || c.snippet.contains(query, true))
+            pass && (query.isBlank() || c.name.contains(query, true) || c.snippet.contains(query, true) ||
+                (nq.isNotEmpty() && app.ios.messages.data.Intel.normalize(c.name).contains(nq)))
         }
     }
     val pins = remember(filtered, pinned, query) {
@@ -563,6 +565,7 @@ private fun RowMenu(
     onMarkRead: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val menuCtx = androidx.compose.ui.platform.LocalContext.current
     IosMenu(expanded = expanded, onDismissRequest = onDismiss) {
         IosMenuItem(
             text = { Text(if (isPinned) stringResource(R.string.unpin) else stringResource(R.string.pin)) },
@@ -577,6 +580,21 @@ private fun RowMenu(
                 text = { Text(stringResource(R.string.mark_as_read)) },
                 onClick = { onMarkRead(); onDismiss() }
             )
+        }
+        if (c.address.count { it.isDigit() } >= 3) {
+            IosMenuItem(
+                text = { Text(stringResource(R.string.copy_number)) },
+                onClick = { app.ios.messages.data.Intel.copy(menuCtx, app.ios.messages.data.Intel.digits(c.address)); onDismiss() }
+            )
+            if (c.known) {
+                IosMenuItem(
+                    text = { Text(stringResource(R.string.copy_contact)) },
+                    onClick = {
+                        app.ios.messages.data.Intel.copy(menuCtx, c.name + "\n" + app.ios.messages.data.Intel.digits(c.address))
+                        onDismiss()
+                    }
+                )
+            }
         }
         if (isDefault) {
             IosMenuItem(
@@ -758,7 +776,9 @@ private fun ConversationRow(
                         Spacer(Modifier.width(6.dp))
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text(DateFmt.list(androidx.compose.ui.platform.LocalContext.current, c.date), color = p.secondary, fontSize = 15.sp, maxLines = 1)
+                    val dateCtx = androidx.compose.ui.platform.LocalContext.current
+                    val dateText = remember(c.date) { DateFmt.list(dateCtx, c.date) }
+                    Text(dateText, color = p.secondary, fontSize = 15.sp, maxLines = 1)
                     Spacer(Modifier.width(6.dp))
                     ChevronRight(p.tertiary)
                 }
