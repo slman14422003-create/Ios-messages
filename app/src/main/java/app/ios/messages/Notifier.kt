@@ -18,8 +18,10 @@ import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.net.Uri
 import android.provider.Settings
+import java.util.concurrent.ConcurrentHashMap
 import app.ios.messages.data.Otp
 import app.ios.messages.data.Prefs
+import app.ios.messages.data.SimInfo
 import app.ios.messages.data.Sims
 import app.ios.messages.data.SmsRepository
 
@@ -37,8 +39,8 @@ private object SharedRepo {
 
 object Notifier {
     const val KEY_REPLY = "reply_text"
-    const val CH_MESSAGES = "messages_v4"
-    const val CH_CODES = "codes_v4"
+    const val CH_MESSAGES = "messages_v5"
+    const val CH_CODES = "codes_v5"
     const val CH_FAILED = "failed_v3"
     private const val GROUP = "app.ios.messages.GROUP"
     private const val SUMMARY_ID = 0x5A11
@@ -49,8 +51,34 @@ object Notifier {
 
     @Volatile private var channelsReady = false
 
-    /** False once a check found no active notification: lets syncRead skip the binder call that returns every posted notification. */
-    @Volatile private var maybeActive = true
+    /** Ids of the conversation notifications this app has posted and that are still showing (no binder call needed to ask). */
+    private val posted: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+    @Volatile private var seeded = false
+
+    private var simsAt = 0L
+    private var simsCache: List<SimInfo> = emptyList()
+
+    /** SIM list for the "SIM 2" sub-text: cached for 30 s so a burst of messages does not hit the telephony binder each time. */
+    private fun simsCached(ctx: Context): List<SimInfo> = synchronized(this) {
+        val now = System.currentTimeMillis()
+        if (now - simsAt > 30_000L) {
+            simsCache = runCatching { Sims.list(ctx) }.getOrDefault(emptyList())
+            simsAt = now
+        }
+        simsCache
+    }
+
+    /** One-time (per process) look at what is already on screen, so a restarted process still knows its own notifications. */
+    private fun seedPosted(nm: NotificationManager) {
+        if (seeded) return
+        synchronized(this) {
+            if (seeded) return
+            runCatching {
+                nm.activeNotifications.forEach { if (it.id != SUMMARY_ID && it.notification.group == GROUP) posted.add(it.id) }
+            }
+            seeded = true
+        }
+    }
 
     private val shortcutAt = HashMap<String, Long>()
     private const val SHORTCUT_GAP_MS = 30L * 60L * 1000L
@@ -75,7 +103,7 @@ object Notifier {
         if (channelsReady && nm.getNotificationChannel(CH_MESSAGES) != null) return nm
         val lc = Lang.wrap(ctx)
         val prefs = Prefs(ctx)
-        if (prefs.notifChannelVersion < 4) {
+        if (prefs.notifChannelVersion < 5) {
             // Older builds left one channel behind for every sound / vibration / pop-up combination.
             val keep = setOf(CH_MESSAGES, CH_CODES, CH_FAILED)
             nm.notificationChannels.forEach { ch ->
@@ -83,7 +111,7 @@ object Notifier {
                     ch.id.startsWith("quiet") || ch.id.startsWith("failed")
                 if (ch.id !in keep && legacy) runCatching { nm.deleteNotificationChannel(ch.id) }
             }
-            prefs.notifChannelVersion = 4
+            prefs.notifChannelVersion = 5
         }
         // createNotificationChannel on an existing channel only refreshes its name / description,
         // which keeps them in the app language while leaving the user's own sound / vibration choices alone.
@@ -103,8 +131,10 @@ object Notifier {
     private fun messageChannel(id: String, name: String, desc: String, lc: Context): NotificationChannel =
         NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
             description = desc
+            // The system's own default notification tone: it follows whatever tone the user picks in Android settings,
+            // and the user can still change sound / vibration / pop-up for this channel there.
             setSound(
-                Sounds.receivedUri(lc),
+                Settings.System.DEFAULT_NOTIFICATION_URI,
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -124,6 +154,12 @@ object Notifier {
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
 
+    /** Opens the system page of one channel (messages / codes) straight on its sound, vibration and pop-up options. */
+    fun channelSettingsIntent(ctx: Context, channelId: String = CH_MESSAGES): Intent =
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
+
     fun show(ctx: Context, address: String, body: String, subId: Int = -1) {
         if (!allowed(ctx)) return
         val prefs = Prefs(ctx)
@@ -132,22 +168,46 @@ object Notifier {
         if (tid != null && tid in prefs.muted) return
         // The conversation is on screen right now: the message is already visible (and gets marked read).
         if (AppState.foreground && AppState.openKey == prefs.key(address)) return
+
+        // Fast path: the notification (and its sound) goes out right away with whatever name is cheap to get.
+        // The slow full address-book search runs afterwards and only refreshes the title / photo silently.
+        val quick = runCatching { repo.quickName(address) }.getOrNull()
+        post(ctx, address, body, subId, tid, quick ?: address, runCatching { repo.cachedPhoto(address) }.getOrNull(), append = true, alert = true)
+        if (quick == null) {
+            Work.run {
+                val full = runCatching { repo.contactName(address) }.getOrNull() ?: return@run
+                if (nid(address) !in posted) return@run
+                post(ctx, address, body, subId, tid, full, runCatching { repo.contactPhoto(address) }.getOrNull(), append = false, alert = false)
+            }
+        }
+    }
+
+    private fun post(
+        ctx: Context, address: String, body: String, subId: Int, tid: Long?,
+        title: String, photo: String?, append: Boolean, alert: Boolean
+    ) {
+        val prefs = Prefs(ctx)
+        val repo = SharedRepo.get(ctx)
         val nm = ensureChannels(ctx)
+        seedPosted(nm)
         val lc = Lang.wrap(ctx)
-        val title = repo.contactName(address) ?: address
         val id = nid(address)
         val code = Otp.extract(body)
         val key = prefs.key(address)
 
         val lines = synchronized(history) {
             val l = history.getOrPut(key) { ArrayList() }
-            l.add(body to System.currentTimeMillis())
+            if (l.isEmpty() && tid != null && tid >= 0) {
+                // Fresh process: rebuild the earlier unread lines from the message store so the notification matches the inbox.
+                runCatching { repo.recentUnread(tid, MAX_LINES) }.getOrNull()?.let { l.addAll(it) }
+            }
+            if (append && !(l.isNotEmpty() && l.last().first == body)) l.add(body to System.currentTimeMillis())
+            if (l.isEmpty()) l.add(body to System.currentTimeMillis())
             while (l.size > MAX_LINES) l.removeAt(0)
             ArrayList(l)
         }
 
-        maybeActive = true
-        val photoIcon = avatar(ctx, repo.contactPhoto(address))
+        val photoIcon = avatar(ctx, photo)
         val sender = Person.Builder().setName(title).setKey(key).apply { if (photoIcon != null) setIcon(photoIcon) }.build()
         val shortcutId = "chat_" + key
         val nowMs = System.currentTimeMillis()
@@ -177,15 +237,16 @@ object Notifier {
             .setCategory(Notification.CATEGORY_MESSAGE)
             .setGroup(GROUP)
             .setAutoCancel(true)
-            .setWhen(System.currentTimeMillis())
+            .setWhen(lines.last().second)
             .setShowWhen(true)
+            .setOnlyAlertOnce(!alert)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setPublicVersion(public)
             .setShortcutId(shortcutId)
             .setLocusId(LocusId(shortcutId))
 
         if (subId >= 0) {
-            val sims = runCatching { Sims.list(ctx) }.getOrDefault(emptyList())
+            val sims = simsCached(ctx)
             if (sims.size > 1) sims.firstOrNull { it.subId == subId }?.let { b.setSubText(it.label) }
         }
 
@@ -237,7 +298,8 @@ object Notifier {
 
         try {
             nm.notify(id, b.build())
-            postSummary(ctx, nm)
+            posted.add(id)
+            if (alert) postSummary(ctx, nm)
         } catch (e: Throwable) {
             android.util.Log.e("IosMessages", "notify failed", e)
         }
@@ -282,7 +344,7 @@ object Notifier {
         )
 
     private fun postSummary(ctx: Context, nm: NotificationManager) {
-        val active = synchronized(history) { history.size }
+        val active = posted.size
         if (active < 2) {
             if (active == 0) nm.cancel(SUMMARY_ID)
             return
@@ -310,6 +372,7 @@ object Notifier {
 
     fun forget(address: String) {
         synchronized(history) { history.remove(Prefs.keyOf(address)) }
+        posted.remove(nid(address))
     }
 
     fun cancel(ctx: Context, address: String) {
@@ -319,20 +382,18 @@ object Notifier {
         cleanSummary(nm)
     }
 
+    /** Removes the notifications of conversations that are now fully read (read in the app, on another device, or by another app). */
     fun syncRead(ctx: Context, readAddresses: List<String>) {
         if (readAddresses.isEmpty()) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        if (!maybeActive) return
-        val activeIds = nm.activeNotifications.map { it.id }.toSet()
-        if (activeIds.isEmpty()) {
-            maybeActive = false
-            return
-        }
+        seedPosted(nm)
+        if (posted.isEmpty()) return
         var changed = false
         readAddresses.forEach { a ->
-            if (nid(a) in activeIds) {
-                nm.cancel(nid(a))
-                forget(a)
+            val id = nid(a)
+            if (posted.remove(id)) {
+                nm.cancel(id)
+                synchronized(history) { history.remove(Prefs.keyOf(a)) }
                 changed = true
             }
         }
@@ -341,12 +402,12 @@ object Notifier {
 
     fun cancelAll(ctx: Context) {
         synchronized(history) { history.clear() }
+        posted.clear()
         ctx.getSystemService(NotificationManager::class.java).cancelAll()
     }
 
     private fun cleanSummary(nm: NotificationManager) {
-        val left = nm.activeNotifications.count { it.id != SUMMARY_ID && it.notification.group == GROUP }
-        if (left == 0) nm.cancel(SUMMARY_ID)
+        if (posted.isEmpty()) nm.cancel(SUMMARY_ID)
     }
 
     fun showReplyResult(ctx: Context, address: String, sentText: String, ok: Boolean) {
@@ -365,7 +426,7 @@ object Notifier {
         val nm = ensureChannels(ctx)
         val lc = Lang.wrap(ctx)
         val title = SharedRepo.get(ctx).contactName(address) ?: address
-        val sims = runCatching { Sims.list(ctx) }.getOrDefault(emptyList())
+        val sims = simsCached(ctx)
         val other = sims.firstOrNull { it.subId != subId }
         val text = if (other != null) lc.getString(R.string.failed_retry_sim, other.label)
         else lc.getString(R.string.failed_retry)

@@ -427,6 +427,21 @@ class SmsRepository(private val ctx: Context) {
         }
     }
 
+    /** Newest unread incoming SMS of a thread, oldest first: (body, time). Used to rebuild a notification after the process restarted. */
+    fun recentUnread(threadId: Long, limit: Int): List<Pair<String, Long>> {
+        if (!canRead()) return emptyList()
+        val out = ArrayList<Pair<String, Long>>()
+        try {
+            cr.query(
+                smsUri, arrayOf("body", "date"), "thread_id=? AND read=0 AND type=1", arrayOf(threadId.toString()),
+                "date DESC LIMIT $limit"
+            )?.use { c -> while (c.moveToNext()) out += (c.getString(0) ?: "") to c.getLong(1) }
+        } catch (_: Exception) {
+        }
+        out.reverse()
+        return out
+    }
+
     /** Marks the newest incoming message of the thread as unread (iOS "Mark as Unread"). */
     fun markUnread(threadId: Long) {
         if (!isDefault()) return

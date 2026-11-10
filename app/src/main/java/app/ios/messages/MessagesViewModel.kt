@@ -108,8 +108,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     /** Fires for any edit in any contacts app (Google, Samsung, Xiaomi...): they all write to the same provider. */
     private val contactsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
-            contactsDirty = true
-            refresh(debounce = true)
+            // Contacts sync fires this constantly: only reload the address book when its fingerprint really changed.
+            refresh(debounce = true, checkContacts = true)
         }
     }
 
