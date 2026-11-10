@@ -814,11 +814,12 @@ private fun BubbleRow(
     }
 
     val r = boundsRef[0]
-    if (menu && r != null) {
+    if (r != null) {
         ContextOverlay(
             bounds = r,
             menuAtEnd = mine,
             previewWidth = null,
+            visible = menu,
             onDismiss = { menu = false },
             preview = { BubbleContent(b, maxW, false, {}, {}) }
         ) {

@@ -345,11 +345,19 @@ fun ConversationsScreen(
                 ?.takeIf { it.isAttached }
                 ?.boundsInWindow()
         }
-        if (menuConv != null && menuBounds != null) {
+        // Keep the last selected row around so the overlay can animate out (blur + menu fade) when it is let go.
+        val lastMenu = remember { arrayOfNulls<Pair<Conversation, androidx.compose.ui.geometry.Rect>>(1) }
+        val menuLive = menuConv != null && menuBounds != null
+        if (menuConv != null && menuBounds != null) lastMenu[0] = menuConv to menuBounds
+        val shown = lastMenu[0]
+        if (shown != null) {
+            val menuConv = shown.first
+            val menuBounds = shown.second
             ContextOverlay(
                 bounds = menuBounds,
                 menuAtEnd = false,
                 previewWidth = menuBounds.width.roundToInt(),
+                visible = menuLive && rowMenu == menuConv.threadId,
                 onDismiss = { rowMenu = null },
                 preview = {
                     Box(Modifier.clip(RoundedCornerShape(16.dp)).background(p.bg)) {

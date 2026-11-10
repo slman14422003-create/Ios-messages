@@ -405,20 +405,27 @@ fun ContextOverlay(
     menuAtEnd: Boolean,
     previewWidth: Int?,
     onDismiss: () -> Unit,
+    visible: Boolean = true,
     preview: @Composable () -> Unit,
     menu: @Composable ColumnScope.() -> Unit
 ) {
     val a = remember { Animatable(0f) }
-    var snap by remember { mutableStateOf<Backdrop?>(null) }
-    val host = LocalView.current
+    var alive by remember { mutableStateOf(false) }
+    // Long-press selection: the whole app blurs and dims behind the preview + menu, exactly like the phone app.
+    // The blur fades out together with the menu when the message is let go (visible -> false).
+    ScreenBlurEffect(visible)
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    LaunchedEffect(Unit) {
-        runCatching { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) }
-        launch { snap = BackdropCache.take(host) ?: captureBackdrop(host) }
-        a.animateTo(1f, Motion.menuIn())
+    LaunchedEffect(visible) {
+        if (visible) {
+            runCatching { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) }
+            alive = true
+            a.animateTo(1f, Motion.menuIn())
+        } else if (alive) {
+            a.animateTo(0f, Motion.menuOut())
+            alive = false
+        }
     }
-    val ready by animateFloatAsState(if (snap != null) 1f else 0f, Motion.fade(220), label = "overlayBlur")
-    val dark = LocalDark.current
+    if (!alive) return
     Popup(
         popupPositionProvider = ZeroPosition,
         onDismissRequest = onDismiss,
@@ -427,23 +434,6 @@ fun ContextOverlay(
         val screen = rememberScreenPos()
         val menuPos = rememberScreenPos()
         Box(Modifier.fillMaxSize().screenPos(screen).plainClickable(onDismiss)) {
-            snap?.let { s ->
-                GlassBackdrop(
-                    s,
-                    screen.pos,
-                    Modifier.matchParentSize().graphicsLayer { alpha = (a.value * ready).coerceIn(0f, 1f) },
-                    blurDp = 22f,
-                    saturation = 1.5f
-                )
-            }
-            Box(
-                Modifier.matchParentSize().drawBehind {
-                    drawRect(
-                        (if (dark) Color.Black else Color(0xFF1C1C1E))
-                            .copy(alpha = (if (dark) 0.34f else 0.16f) * a.value)
-                    )
-                }
-            )
             Layout(
                 modifier = Modifier.fillMaxSize(),
                 content = {
