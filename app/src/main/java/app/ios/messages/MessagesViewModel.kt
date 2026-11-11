@@ -17,9 +17,8 @@ import app.ios.messages.data.SimInfo
 import app.ios.messages.data.Sims
 import app.ios.messages.data.SmsRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -60,8 +59,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     private val _muted = MutableStateFlow(prefs.muted)
     val muted: StateFlow<Set<Long>> = _muted
 
-    private val _bubbleBlue = MutableStateFlow(prefs.bubbleBlue)
-    val bubbleBlue: StateFlow<Boolean> = _bubbleBlue
+    private val _bubble = MutableStateFlow(prefs.bubbleConfig)
+    val bubble: StateFlow<app.ios.messages.data.BubbleConfig> = _bubble
 
     private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
     val contacts: StateFlow<List<Contact>> = _contacts
@@ -97,10 +96,13 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     private var openThread: Long? = null
     @Volatile
     private var simsAt = 0L
-    private var job: Job? = null
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
+            if (!AppState.foreground) {
+                staleInBackground = true
+                return
+            }
             refresh(debounce = true)
         }
     }
@@ -108,6 +110,10 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     /** Fires for any edit in any contacts app (Google, Samsung, Xiaomi...): they all write to the same provider. */
     private val contactsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
+            if (!AppState.foreground) {
+                staleInBackground = true
+                return
+            }
             // Contacts sync fires this constantly: only reload the address book when its fingerprint really changed.
             refresh(debounce = true, checkContacts = true)
         }
@@ -115,12 +121,25 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
 
     @Volatile private var contactsDirty = true
     @Volatile private var versionPending = false
+    @Volatile private var staleInBackground = false
+    @Volatile private var wantContactsCheck = false
+    @Volatile private var settleAt = 0L
     private var contactsStamp = ""
 
+    /** One request slot: bursts of provider changes collapse into a single reload, and reloads never overlap. */
+    private val requests = Channel<Unit>(Channel.CONFLATED)
+
     init {
-        Notifier.ensureChannels(app)
         app.contentResolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
         app.contentResolver.registerContentObserver(ContactsContract.AUTHORITY_URI, true, contactsObserver)
+        viewModelScope.launch(Dispatchers.IO) {
+            Notifier.ensureChannels(app)
+            for (r in requests) {
+                val wait = settleAt - System.currentTimeMillis()
+                if (wait > 0) delay(wait)
+                runRefresh()
+            }
+        }
         refresh()
         loadTrash()
         applyRetention()
@@ -146,9 +165,9 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         prefs.muted = s
     }
 
-    fun setBubbleBlue(v: Boolean) {
-        _bubbleBlue.value = v
-        prefs.bubbleBlue = v
+    fun setBubble(v: app.ios.messages.data.BubbleConfig) {
+        _bubble.value = v
+        prefs.bubbleConfig = v
     }
 
     fun markRead(ids: List<Long>) {
@@ -193,9 +212,19 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh(debounce: Boolean = false, checkContacts: Boolean = false) {
-        job?.cancel()
-        job = viewModelScope.launch(Dispatchers.IO) {
-            if (debounce) delay(300)
+        if (checkContacts) wantContactsCheck = true
+        if (debounce) {
+            val t = System.currentTimeMillis() + 250
+            if (t > settleAt) settleAt = t
+        }
+        requests.trySend(Unit)
+    }
+
+    private suspend fun runRefresh() {
+        staleInBackground = false
+        val checkContacts = wantContactsCheck
+        wantContactsCheck = false
+        run {
             try {
                 // The address book may have changed while the app was away (or the change event was missed).
                 if (checkContacts) {
@@ -237,13 +266,11 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
                 val list = if (extra.isEmpty()) base else (base + extra).sortedByDescending { it.date }
-                ensureActive()
                 _conversations.value = list
                 Notifier.syncRead(getApplication(), list.filter { it.unread == 0 }.map { it.address })
                 openThread?.let { tid ->
                     val m = repo.messages(tid)
-                    ensureActive()
-                    _messages.value = m
+                    if (openThread == tid) _messages.value = m
                     if (m.any { !it.mine && !it.read }) repo.markRead(tid)
                 }
                 if (versionPending) {

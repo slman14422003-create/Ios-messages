@@ -185,10 +185,24 @@ fun ChatScreen(
     onRetry: (Message, Int) -> Unit,
     onReady: () -> Unit = {}
 ) {
-    CompositionLocalProvider(LocalSims provides sims) {
+    val ctx = LocalContext.current
+    val cfg = LocalBubbleConfig.current
+    val address = target.address.orEmpty()
+    val prefs = remember { app.ios.messages.data.Prefs(ctx) }
+    var chatTheme by remember(address) { mutableStateOf(prefs.chatTheme(address)) }
+    val style = remember(cfg, chatTheme) { cfg.style(chatTheme) }
+    CompositionLocalProvider(
+        LocalSims provides sims,
+        LocalBubbleStyle provides style,
+        LocalSentColor provides style.bottom
+    ) {
         ChatScreenBody(
             target, messages, isDefault, sims, initialSim, initialDraft,
-            onBack, onSend, onDeleteMessage, onPickSim, onDraft, onRetry, onReady
+            onBack, onSend, onDeleteMessage, onPickSim, onDraft, onRetry, onReady,
+            chatTheme, { id ->
+                chatTheme = id
+                if (address.isNotEmpty()) prefs.setChatTheme(address, id)
+            }
         )
     }
 }
@@ -208,9 +222,15 @@ private fun ChatScreenBody(
     onPickSim: (Int) -> Unit,
     onDraft: (String) -> Unit,
     onRetry: (Message, Int) -> Unit,
-    onReady: () -> Unit
+    onReady: () -> Unit,
+    chatTheme: String,
+    onChatTheme: (String) -> Unit
 ) {
     val p = LocalPalette.current
+    val bubbleStyle = LocalBubbleStyle.current
+    val isDark = LocalDark.current
+    val chatBase = remember(bubbleStyle, p, isDark) { bubbleStyle.chatBase(p.bg, isDark) }
+    val chatBrush = remember(bubbleStyle, p, isDark) { bubbleStyle.chatBrush(p.bg, isDark) }
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val density = LocalDensity.current
@@ -313,12 +333,18 @@ private fun ChatScreenBody(
         }
     }
 
-    val replyIds = remember(messages, address) {
-        app.ios.messages.data.SmartReply.suggest(messages.lastOrNull()?.takeIf { !it.mine }?.body, address)
+    val replies = remember(messages, address) {
+        app.ios.messages.data.SmartReply
+            .suggest(messages.lastOrNull()?.takeIf { !it.mine }?.body, address)
+            .map { app.ios.messages.data.SmartReply.text(ctx, it) }
     }
-    val replies = replyIds.map { stringResource(it) }
 
-    Box(Modifier.fillMaxSize().background(p.bg).imePadding()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(if (chatBrush != null) Modifier.background(chatBrush) else Modifier.background(chatBase))
+            .imePadding()
+    ) {
         LazyColumn(
             state = listState,
             reverseLayout = true,
@@ -328,7 +354,7 @@ private fun ChatScreenBody(
                     liveTop,
                     { headerH + fadeTail }, { 1f },
                     { inputH + fadeTail }, { 1f },
-                    p.bg, p.bg.copy(alpha = 0.62f), blurPx, fade = true
+                    chatBase, chatBase.copy(alpha = 0.62f), blurPx, fade = true
                 )
                 .pointerInput(Unit) {
                     val back = spring<Float>(dampingRatio = 0.8f, stiffness = 380f)
@@ -417,7 +443,7 @@ private fun ChatScreenBody(
                         Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 8.dp),
                         onClick = { kbc?.hide(); onBack() }
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
-                    if (menu) ContactSheet(name, address, target.photo, { searchOpen = true; searchQuery = ""; searchPos = 0 }) { menu = false }
+                    if (menu) ContactSheet(name, address, target.photo, { searchOpen = true; searchQuery = ""; searchPos = 0 }, chatTheme, onChatTheme) { menu = false }
                     Column(
                         Modifier
                             .align(Alignment.TopCenter)
@@ -654,10 +680,10 @@ private fun BubbleContent(
     modifier: Modifier = Modifier
 ) {
     val p = LocalPalette.current
-    val sent = LocalSentColor.current
+    val style = LocalBubbleStyle.current
     val mine = b.m.mine
     val ctx = LocalContext.current
-    val shape = remember(mine, b.tail) { BubbleShape(mine, b.tail) }
+    val shape = remember(mine, b.tail, style.tails) { BubbleShape(mine, b.tail && style.tails) }
     val linkColor = if (mine) Color.White else p.blue
     val annotated = remember(b.m.body, linkColor) { linkify(b.m.body, linkColor) }
     val layoutRef = remember { arrayOfNulls<TextLayoutResult>(1) }
@@ -697,7 +723,7 @@ private fun BubbleContent(
                 lineHeight = 22.sp,
                 modifier = Modifier
                     .widthIn(max = maxW)
-                    .background(if (mine) sent else p.received, shape)
+                    .bubbleFill(style, mine, shape)
                     .then(
                         if (interactive) Modifier.pointerInput(annotated) {
                             val ox = padStart.toPx()
@@ -745,8 +771,6 @@ private fun BubbleRow(
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val thud = rememberThud()
-    val otpCode = remember(b.m.body) { app.ios.messages.data.Otp.extract(b.m.body) }
-    val bodyNumbers = remember(b.m.body) { app.ios.messages.data.Intel.numbers(b.m.body) }
     var menu by remember { mutableStateOf(false) }
     val maxW = (LocalConfiguration.current.screenWidthDp * 0.76f).dp
     val boundsRef = remember { arrayOfNulls<Rect>(1) }
@@ -823,6 +847,8 @@ private fun BubbleRow(
             onDismiss = { menu = false },
             preview = { BubbleContent(b, maxW, false, {}, {}) }
         ) {
+            val otpCode = remember(b.m.body) { app.ios.messages.data.Otp.extract(b.m.body) }
+            val bodyNumbers = remember(b.m.body) { app.ios.messages.data.Intel.numbers(b.m.body) }
             IosMenuItem(
                 text = { Text(stringResource(R.string.copy)) },
                 onClick = {
@@ -1139,8 +1165,39 @@ private fun lastLocationLink(ctx: android.content.Context): String? {
 
 
 @Composable
-private fun ContactSheet(name: String, address: String, photo: String?, onSearch: () -> Unit, onDismiss: () -> Unit) {
+private fun ContactSheet(
+    name: String,
+    address: String,
+    photo: String?,
+    onSearch: () -> Unit,
+    chatTheme: String,
+    onChatTheme: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
     val p = LocalPalette.current
+    val cfg = LocalBubbleConfig.current
+    var themePicker by remember { mutableStateOf(false) }
+    if (themePicker) {
+        IosAlert(
+            title = stringResource(R.string.chat_theme),
+            actions = listOf(AlertAction(stringResource(R.string.cancel), onClick = { themePicker = false })),
+            onDismiss = { themePicker = false }
+        ) {
+            ThemeSwatches(chatTheme, cfg.hue, { onChatTheme(it); themePicker = false })
+            Spacer(Modifier.height(4.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(p.fieldFill)
+                    .iosClickable(onClick = { onChatTheme(""); themePicker = false }),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(stringResource(R.string.chat_theme_default), color = p.blue, fontSize = 16.sp)
+            }
+        }
+    }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val contactUri = remember(address) { findContactUri(ctx, address) }
@@ -1202,6 +1259,28 @@ private fun ContactSheet(name: String, address: String, photo: String?, onSearch
             SearchIcon(p.blue, Modifier.size(18.dp))
             Spacer(Modifier.width(10.dp))
             Text(stringResource(R.string.search_in_chat), color = p.blue, fontSize = 16.sp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(p.fieldFill)
+                .iosClickable(onClick = { themePicker = true })
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BubbleIcon(p.blue, Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(stringResource(R.string.chat_theme), color = p.blue, fontSize = 16.sp, modifier = Modifier.weight(1f))
+            val dot = remember(chatTheme, cfg) { cfg.style(chatTheme) }
+            Box(
+                Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(Brush.verticalGradient(listOf(dot.top, dot.bottom)))
+            )
         }
         if (canBlock) {
             Spacer(Modifier.height(8.dp))

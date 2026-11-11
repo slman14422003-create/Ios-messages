@@ -68,9 +68,8 @@ import androidx.lifecycle.lifecycleScope
 import app.ios.messages.ui.ChatScreen
 import app.ios.messages.ui.ConversationsScreen
 import app.ios.messages.ui.IMessageTheme
-import app.ios.messages.ui.IosBlue
+import app.ios.messages.ui.style
 import app.ios.messages.ui.NewMessageScreen
-import app.ios.messages.ui.SentBubble
 import app.ios.messages.ui.SettingsScreen
 import app.ios.messages.ui.SetupScreen
 import app.ios.messages.ui.plainClickable
@@ -128,7 +127,8 @@ class MainActivity : ComponentActivity() {
             returnToCaller = pendingAddress != null && intent.getBooleanExtra(Transitions.EXTRA_RETURN, false)
         }
         setContent {
-            val blue by vm.bubbleBlue.collectAsStateWithLifecycle()
+            val bubbleCfg by vm.bubble.collectAsStateWithLifecycle()
+            val bubbleStyle = remember(bubbleCfg) { bubbleCfg.style() }
             val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
             val dark = when (appearance) { 1 -> false; 2 -> true; else -> sysDark }
             androidx.compose.runtime.DisposableEffect(dark) {
@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
                     baseDensity.density, baseDensity.fontScale * textScale
                 )
             ) {
-            IMessageTheme(sent = if (blue) IosBlue else SentBubble, appearance = appearance) {
+            IMessageTheme(bubble = bubbleStyle, config = bubbleCfg, appearance = appearance) {
                 App(
                     vm, pendingAddress,
                     onLanguage = { Prefs(this).language = it; recreate() },
@@ -234,7 +234,7 @@ class MainActivity : ComponentActivity() {
                     prefetch?.cancel()
                     app.ios.messages.ui.BackdropCache.clear()
                     prefetch = lifecycleScope.launch {
-                        kotlinx.coroutines.delay(200)
+                        kotlinx.coroutines.delay(280)
                         app.ios.messages.ui.BackdropCache.put(app.ios.messages.ui.captureBackdrop(window.decorView))
                     }
                 }
@@ -305,6 +305,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
     val sims by vm.sims.collectAsStateWithLifecycle()
     val setupDismissed by vm.setupDismissed.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsPage by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(settingsOpen) { if (!settingsOpen) { kotlinx.coroutines.delay(500); settingsPage = null } }
     var keepDays by remember { mutableStateOf(Prefs(ctx).keepDays) }
 
     var chat by rememberSaveable { mutableStateOf<ChatTarget?>(null) }
@@ -389,6 +391,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             backScope.launch { settingsProgress.animateTo(1f, Motion.pushF(1f - settingsProgress.value)) }
         }
     }
+    androidx.activity.compose.BackHandler(enabled = settingsOpen && settingsPage != null) { settingsPage = null }
 
     // Menus, dialogs and sheets raise ScreenBlur; the whole app blurs and dims behind them (same as the phone app).
     val menuOpen = app.ios.messages.ui.ScreenBlur.count > 0
@@ -519,7 +522,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
         if (settingsVisible || settingsOpen) {
             // Collected only while the settings screen exists, so toggling a preference no longer
             // recomposes the whole app root.
-            val bubbleBlue by vm.bubbleBlue.collectAsStateWithLifecycle()
+            val bubbleCfg by vm.bubble.collectAsStateWithLifecycle()
             val defaultSub by vm.defaultSub.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = settingsProgress.value * Motion.PushDim) })
             Box(
@@ -531,7 +534,10 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 SettingsScreen(
                     isDefault = isDefault,
                     hasPermission = hasPermission,
-                    bubbleBlue = bubbleBlue,
+                    bubble = bubbleCfg,
+                    onBubble = vm::setBubble,
+                    page = settingsPage,
+                    onPage = { settingsPage = it },
                     onBack = { settingsOpen = false },
                     onMakeDefault = {
                         val rm = ctx.getSystemService(RoleManager::class.java)
@@ -545,7 +551,6 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName))
                         )
                     },
-                    onBubbleBlue = vm::setBubbleBlue,
                     onSystemNotifications = {
                         Notifier.ensureChannels(ctx)
                         runCatching { ctx.startActivity(Notifier.systemSettingsIntent(ctx)) }
@@ -568,7 +573,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
             }
             EdgeSwipeBack(
                 progress = settingsProgress,
-                enabled = settingsOpen,
+                enabled = settingsOpen && settingsPage == null,
                 onCommit = { settingsOpen = false },
                 modifier = Modifier.align(Alignment.CenterStart)
             )
@@ -627,7 +632,7 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
 
 
 @Composable
-private fun EdgeSwipeBack(
+internal fun EdgeSwipeBack(
     progress: Animatable<Float, AnimationVector1D>,
     enabled: Boolean,
     onCommit: () -> Unit,

@@ -18,8 +18,18 @@ import android.os.PersistableBundle
 import app.ios.messages.data.SmsRepository
 
 internal object Work {
-    private val sequential = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "msg-ordered").apply { isDaemon = true } }
-    private val pool = java.util.concurrent.Executors.newFixedThreadPool(3) { r -> Thread(r, "msg-work").apply { isDaemon = true } }
+    private val sequential = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT)
+            r.run()
+        }, "msg-ordered").apply { isDaemon = true }
+    }
+    private val pool = java.util.concurrent.Executors.newFixedThreadPool(2) { r ->
+        Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            r.run()
+        }, "msg-work").apply { isDaemon = true }
+    }
 
     fun ordered(block: () -> Unit) {
         sequential.execute(block)
@@ -71,11 +81,17 @@ class SmsReceiver : BroadcastReceiver() {
             put("type", 1)
             if (sub >= 0) put("sub_id", sub)
         }
+        var tid: Long? = null
         try {
-            context.contentResolver.insert(Uri.parse("content://sms/inbox"), v)
+            val row = context.contentResolver.insert(Uri.parse("content://sms/inbox"), v)
+            if (row != null) {
+                context.contentResolver.query(row, arrayOf("thread_id"), null, null, null)?.use {
+                    if (it.moveToFirst()) tid = it.getLong(0).takeIf { t -> t >= 0 }
+                }
+            }
         } catch (_: Exception) {
         }
-        Notifier.show(context, address, body, sub)
+        Notifier.show(context, address, body, sub, tid)
     }
 }
 
@@ -98,18 +114,22 @@ class MmsReceiver : BroadcastReceiver() {
 
 class MmsSentReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        try {
-            handle(context, intent)
-        } catch (e: Throwable) {
-            android.util.Log.e("IosMessages", "receiver failed", e)
-        }
-    }
-
-    private fun handle(context: Context, intent: Intent) {
         val id = intent.getLongExtra("mms_id", -1L)
         if (id < 0) return
-        Mms.setBox(context, id, if (resultCode == Activity.RESULT_OK) 2 else 5)
-        intent.getStringExtra("file")?.let { File(it).delete() }
+        val ok = resultCode == Activity.RESULT_OK
+        val file = intent.getStringExtra("file")
+        val app = context.applicationContext
+        val pending = goAsync()
+        Work.run {
+            try {
+                Mms.setBox(app, id, if (ok) 2 else 5)
+                file?.let { File(it).delete() }
+            } catch (e: Throwable) {
+                android.util.Log.e("IosMessages", "receiver failed", e)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 }
 
@@ -174,17 +194,23 @@ class HeadlessSmsSendService : Service() {
 /** Radio answered for an outgoing SMS: flip the outbox row to sent / failed. */
 class SmsSentReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        try {
-            handle(context, intent)
-        } catch (e: Throwable) {
-            android.util.Log.e("IosMessages", "receiver failed", e)
-        }
-    }
-
-    private fun handle(context: Context, intent: Intent) {
         val id = intent.getLongExtra("sms_id", -1L)
         if (id < 0) return
         val ok = resultCode == Activity.RESULT_OK
+        val app = context.applicationContext
+        val pending = goAsync()
+        Work.ordered {
+            try {
+                handle(app, intent, id, ok)
+            } catch (e: Throwable) {
+                android.util.Log.e("IosMessages", "receiver failed", e)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    private fun handle(context: Context, intent: Intent, id: Long, ok: Boolean) {
         val cr = context.contentResolver
         val uri = Uri.parse("content://sms/$id")
         try {

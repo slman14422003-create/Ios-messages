@@ -71,7 +71,9 @@ fun PrivacySecuritySection() {
         ctx.packageManager.checkPermission(android.Manifest.permission.INTERNET, ctx.packageName) ==
             PackageManager.PERMISSION_GRANTED
     }
-    val verdict = remember { Integrity.verdict(ctx) }
+    val verdict by androidx.compose.runtime.produceState(Integrity.Verdict.OK) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { Integrity.verdict(ctx) }
+    }
 
     Section(stringResource(R.string.privacy_security), stringResource(R.string.privacy_footer)) {
         SettingRow(stringResource(R.string.block_screenshots)) {

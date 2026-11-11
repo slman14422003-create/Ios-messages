@@ -10,6 +10,35 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("bubble_blue", false)
         set(v) { sp.edit().putBoolean("bubble_blue", v).apply() }
 
+    var bubbleConfig: BubbleConfig
+        get() = BubbleConfig(
+            theme = sp.getString("bubble_theme", null) ?: if (bubbleBlue) "blue" else "green",
+            hue = sp.getFloat("bubble_hue", 210f),
+            received = sp.getInt("bubble_received", 0),
+            tails = sp.getBoolean("bubble_tails", true),
+            chatBg = sp.getInt("bubble_chat_bg", 0),
+            gradient = sp.getBoolean("bubble_gradient", true)
+        )
+        set(v) {
+            sp.edit()
+                .putString("bubble_theme", v.theme)
+                .putFloat("bubble_hue", v.hue)
+                .putInt("bubble_received", v.received)
+                .putBoolean("bubble_tails", v.tails)
+                .putInt("bubble_chat_bg", v.chatBg)
+                .putBoolean("bubble_gradient", v.gradient)
+                .apply()
+        }
+
+    /** Theme id chosen for one conversation, or "" to follow the app-wide theme. */
+    fun chatTheme(address: String): String = sp.getString("chat_theme_" + key(address), "") ?: ""
+
+    fun setChatTheme(address: String, id: String) {
+        val e = sp.edit()
+        if (id.isEmpty()) e.remove("chat_theme_" + key(address)) else e.putString("chat_theme_" + key(address), id)
+        e.apply()
+    }
+
     var appearance: Int
         get() = sp.getInt("appearance", 0)
         set(v) { sp.edit().putInt("appearance", v).apply() }
@@ -32,8 +61,8 @@ class Prefs(ctx: Context) {
 
     /** Smooth mode: lists use cheap static bars instead of live blur. */
     var smoothMode: Boolean
-        get() = sp.getBoolean("smooth_mode2", false)
-        set(v) { sp.edit().putBoolean("smooth_mode2", v).apply() }
+        get() = sp.getBoolean("smooth_mode3", true)
+        set(v) { sp.edit().putBoolean("smooth_mode3", v).apply() }
 
     var sentSound: Boolean
         get() = sp.getBoolean("sent_sound", true)

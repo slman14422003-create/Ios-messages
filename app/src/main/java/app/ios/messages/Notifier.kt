@@ -98,9 +98,16 @@ object Notifier {
         )
     }
 
+    @Volatile private var channelsCheckedAt = 0L
+
     fun ensureChannels(ctx: Context): NotificationManager {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        if (channelsReady && nm.getNotificationChannel(CH_MESSAGES) != null) return nm
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (channelsReady && now - channelsCheckedAt < 60_000L) return nm
+        if (channelsReady && nm.getNotificationChannel(CH_MESSAGES) != null) {
+            channelsCheckedAt = now
+            return nm
+        }
         val lc = Lang.wrap(ctx)
         val prefs = Prefs(ctx)
         if (prefs.notifChannelVersion < 5) {
@@ -124,6 +131,7 @@ object Notifier {
             }
         )
         channelsReady = true
+        channelsCheckedAt = now
         return nm
     }
 
@@ -160,11 +168,11 @@ object Notifier {
             .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
             .putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
 
-    fun show(ctx: Context, address: String, body: String, subId: Int = -1) {
+    fun show(ctx: Context, address: String, body: String, subId: Int = -1, knownThread: Long? = null) {
         if (!allowed(ctx)) return
         val prefs = Prefs(ctx)
         val repo = SharedRepo.get(ctx)
-        val tid = runCatching { repo.threadIdFor(address) }.getOrNull()
+        val tid = knownThread ?: runCatching { repo.threadIdFor(address) }.getOrNull()
         if (tid != null && tid in prefs.muted) return
         // The conversation is on screen right now: the message is already visible (and gets marked read).
         if (AppState.foreground && AppState.openKey == prefs.key(address)) return
@@ -195,12 +203,13 @@ object Notifier {
         val code = Otp.extract(body)
         val key = prefs.key(address)
 
+        val needSeed = synchronized(history) { history[key].isNullOrEmpty() }
+        // Fresh process: rebuild the earlier unread lines from the message store. The query runs outside the lock
+        // so a slow provider can never block the main thread (dismiss receiver, chat open) waiting for it.
+        val seed = if (needSeed && tid != null && tid >= 0) runCatching { repo.recentUnread(tid, MAX_LINES) }.getOrNull() else null
         val lines = synchronized(history) {
             val l = history.getOrPut(key) { ArrayList() }
-            if (l.isEmpty() && tid != null && tid >= 0) {
-                // Fresh process: rebuild the earlier unread lines from the message store so the notification matches the inbox.
-                runCatching { repo.recentUnread(tid, MAX_LINES) }.getOrNull()?.let { l.addAll(it) }
-            }
+            if (l.isEmpty() && seed != null) l.addAll(seed)
             if (append && !(l.isNotEmpty() && l.last().first == body)) l.add(body to System.currentTimeMillis())
             if (l.isEmpty()) l.add(body to System.currentTimeMillis())
             while (l.size > MAX_LINES) l.removeAt(0)
@@ -305,8 +314,21 @@ object Notifier {
         }
     }
 
+    private val avatarCache = object : LinkedHashMap<String, Icon>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Icon>?): Boolean = size > 24
+    }
+
     private fun avatar(ctx: Context, photo: String?): Icon? {
         if (photo.isNullOrEmpty()) return null
+        synchronized(avatarCache) { avatarCache[photo]?.let { return it } }
+        val made = decodeAvatar(ctx, photo)
+        if (made != null) synchronized(avatarCache) { avatarCache[photo] = made }
+        return made
+    }
+
+    fun clearAvatars() = synchronized(avatarCache) { avatarCache.clear() }
+
+    private fun decodeAvatar(ctx: Context, photo: String): Icon? {
         return runCatching {
             val uri = Uri.parse(photo)
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -343,12 +365,17 @@ object Notifier {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+    @Volatile private var summaryCount = 0
+
     private fun postSummary(ctx: Context, nm: NotificationManager) {
         val active = posted.size
         if (active < 2) {
-            if (active == 0) nm.cancel(SUMMARY_ID)
+            if (active == 0 && summaryCount != 0) nm.cancel(SUMMARY_ID)
+            summaryCount = 0
             return
         }
+        if (active == summaryCount) return
+        summaryCount = active
         val lc = Lang.wrap(ctx)
         val label = lc.getString(R.string.notif_conversations, active)
         val open = PendingIntent.getActivity(
@@ -407,7 +434,10 @@ object Notifier {
     }
 
     private fun cleanSummary(nm: NotificationManager) {
-        if (posted.isEmpty()) nm.cancel(SUMMARY_ID)
+        if (posted.isEmpty()) {
+            summaryCount = 0
+            nm.cancel(SUMMARY_ID)
+        }
     }
 
     fun showReplyResult(ctx: Context, address: String, sentText: String, ok: Boolean) {

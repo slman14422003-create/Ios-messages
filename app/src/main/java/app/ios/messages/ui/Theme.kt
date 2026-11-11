@@ -86,12 +86,19 @@ val LocalPalette = staticCompositionLocalOf { LightPalette }
 val LocalDark = staticCompositionLocalOf { false }
 
 @Composable
-fun IMessageTheme(sent: Color = SentBubble, appearance: Int = 0, content: @Composable () -> Unit) {
+fun IMessageTheme(
+    bubble: BubbleStyle = BubbleStyle.Default,
+    config: app.ios.messages.data.BubbleConfig = app.ios.messages.data.BubbleConfig(),
+    appearance: Int = 0,
+    content: @Composable () -> Unit
+) {
     val dark = when (appearance) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
     CompositionLocalProvider(
         LocalPalette provides if (dark) DarkPalette else LightPalette,
         LocalDark provides dark,
-        LocalSentColor provides sent
+        LocalSentColor provides bubble.bottom,
+        LocalBubbleStyle provides bubble,
+        LocalBubbleConfig provides config
     ) {
         MaterialTheme(
             colorScheme = if (dark) darkColorScheme() else lightColorScheme()
