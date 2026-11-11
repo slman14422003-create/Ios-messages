@@ -426,7 +426,7 @@ private fun ThemePage(cfg: BubbleConfig, onChange: (BubbleConfig) -> Unit) {
         BubblePreview(remember(live) { live.style() })
     }
     Section(stringResource(R.string.settings_color), stringResource(R.string.theme_footer)) {
-        ThemeSwatches(live.theme, hue) { id -> onChange(live.copy(theme = id)) }
+        ThemeSwatches(live.theme, hue, onSelect = { id -> onChange(live.copy(theme = id)) })
         if (live.theme == "custom") {
             Hairline(Modifier.padding(start = 16.dp))
             Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
