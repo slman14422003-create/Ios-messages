@@ -262,6 +262,13 @@ private fun ChatScreenBody(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) attach = uri.toString()
     }
+    var drawing by remember { mutableStateOf(false) }
+    if (drawing) {
+        DrawingSheet(
+            onDone = { uri -> attach = uri.toString(); drawing = false },
+            onCancel = { drawing = false }
+        )
+    }
     val itemsCtx = androidx.compose.ui.platform.LocalContext.current
     val kbc = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     var camUri by rememberSaveable { mutableStateOf<String?>(null) }
@@ -612,6 +619,7 @@ private fun ChatScreenBody(
                     }
                 },
                 onPhotos = { picker.launch("image/*") },
+                onDraw = { drawing = true },
                 onStickers = { kbc?.hide(); emojiOpen = true },
                 onContact = { runCatching { pickContact.launch(null) } },
                 onLocation = {
@@ -941,6 +949,7 @@ private fun InputBar(
     onBackspace: () -> Unit,
     onCamera: () -> Unit,
     onPhotos: () -> Unit,
+    onDraw: () -> Unit,
     onStickers: () -> Unit,
     onContact: () -> Unit,
     onLocation: () -> Unit,
@@ -1036,6 +1045,9 @@ private fun InputBar(
                     }
                     IosMenuRow(checkColumn = false, icon = { PhotoIcon(p.label) }, onClick = { plusOpen = false; onPhotos() }) {
                         Text(stringResource(R.string.attach_photos))
+                    }
+                    IosMenuRow(checkColumn = false, icon = { PencilIcon(p.label) }, onClick = { plusOpen = false; onDraw() }) {
+                        Text(stringResource(R.string.attach_draw))
                     }
                     IosMenuRow(checkColumn = false, icon = { EmojiIcon(p.label) }, onClick = { plusOpen = false; onStickers() }) {
                         Text(stringResource(R.string.attach_stickers))

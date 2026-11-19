@@ -144,4 +144,19 @@ object TrashStore {
         if (added > 0) purge(ctx, id)
         return added
     }
+
+    @Synchronized
+    fun purgeAll(ctx: Context) {
+        writeAll(ctx, JSONArray())
+    }
+
+    @Synchronized
+    fun restoreAll(ctx: Context): Int {
+        val all = readAll(ctx)
+        val ids = ArrayList<String>()
+        for (i in 0 until all.length()) all.optJSONObject(i)?.optString("id")?.let { ids.add(it) }
+        var added = 0
+        for (id in ids) added += restore(ctx, id)
+        return added
+    }
 }

@@ -437,6 +437,8 @@ private fun App(vm: MessagesViewModel, pendingAddress: String?, onLanguage: (Str
                 trash = trash,
                 onRestoreTrash = { vm.restoreTrash(it) },
                 onPurgeTrash = { vm.purgeTrash(it) },
+                onPurgeAllTrash = { vm.purgeAllTrash() },
+                onRestoreAllTrash = { vm.restoreAllTrash() },
                 onTogglePin = { vm.togglePin(it) },
                 onToggleMute = { vm.toggleMute(it) },
                 onMakeDefault = {

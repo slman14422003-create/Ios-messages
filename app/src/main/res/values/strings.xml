@@ -241,4 +241,11 @@
     <string name="settings_storage">Storage &amp; Backup</string>
     <string name="settings_about_perm">Permissions &amp; About</string>
     <string name="settings_color">Color</string>
+    <string name="recover_all">Recover All</string>
+    <string name="delete_all">Delete All</string>
+    <string name="delete_all_trash_msg">These messages will be permanently deleted and cannot be recovered.</string>
+    <string name="auto_resend">Auto-Resend Failed Messages</string>
+    <string name="attach_draw">Draw</string>
+    <string name="draw_clear">Clear</string>
+    <string name="draw_done">Done</string>
 </resources>

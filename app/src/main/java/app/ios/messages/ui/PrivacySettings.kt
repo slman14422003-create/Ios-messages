@@ -39,10 +39,14 @@ fun SystemNotificationsSection(onOpenSystem: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = remember { Prefs(ctx) }
     var sent by remember { mutableStateOf(prefs.sentSound) }
+    var resend by remember { mutableStateOf(prefs.autoResend) }
     Section(stringResource(R.string.notifications), stringResource(R.string.notifications_system_footer)) {
         SettingRow(stringResource(R.string.notifications_system), onClick = onOpenSystem) { ChevronRight(p.tertiary) }
-        SettingRow(stringResource(R.string.sent_sound), last = true) {
+        SettingRow(stringResource(R.string.sent_sound)) {
             IosSwitch(sent) { sent = it; prefs.sentSound = it; if (it) Sounds.playSent(ctx) }
+        }
+        SettingRow(stringResource(R.string.auto_resend), last = true) {
+            IosSwitch(resend) { resend = it; prefs.autoResend = it }
         }
     }
 }

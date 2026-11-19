@@ -18,5 +18,6 @@ class MessagesApp : Application() {
         }
         app.ios.messages.ui.Perf.cheapBlur = app.ios.messages.data.Prefs(this).smoothMode
         Thread { Sounds.warmUp(this) }.start()
+        app.ios.messages.data.AutoResend.start(this)
     }
 }

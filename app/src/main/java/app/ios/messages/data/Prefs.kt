@@ -64,6 +64,10 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("smooth_mode3", true)
         set(v) { sp.edit().putBoolean("smooth_mode3", v).apply() }
 
+    var autoResend: Boolean
+        get() = sp.getBoolean("auto_resend", true)
+        set(v) { sp.edit().putBoolean("auto_resend", v).apply() }
+
     var sentSound: Boolean
         get() = sp.getBoolean("sent_sound", true)
         set(v) { sp.edit().putBoolean("sent_sound", v).apply() }

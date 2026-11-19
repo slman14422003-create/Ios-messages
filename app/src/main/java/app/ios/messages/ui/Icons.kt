@@ -382,3 +382,21 @@ fun TrashIcon(color: Color, modifier: Modifier = Modifier) {
         drawLine(color, Offset(w * 0.58f, w * 0.40f), Offset(w * 0.57f, w * 0.70f), sw, StrokeCap.Round)
     }
 }
+
+@Composable
+fun PencilIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val sw = 1.8.dp.toPx()
+        val w = size.width
+        val body = Path().apply {
+            moveTo(w * 0.18f, w * 0.82f)
+            lineTo(w * 0.24f, w * 0.60f)
+            lineTo(w * 0.66f, w * 0.18f)
+            lineTo(w * 0.82f, w * 0.34f)
+            lineTo(w * 0.40f, w * 0.76f)
+            close()
+        }
+        drawPath(body, color, style = Stroke(sw, join = StrokeJoin.Round))
+        drawLine(color, Offset(w * 0.58f, w * 0.26f), Offset(w * 0.74f, w * 0.42f), strokeWidth = sw)
+    }
+}

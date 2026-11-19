@@ -236,4 +236,11 @@
     <string name="settings_storage">التخزين والنسخ الاحتياطي</string>
     <string name="settings_about_perm">الأذونات وحول</string>
     <string name="settings_color">اللون</string>
+    <string name="recover_all">استرجاع الكل</string>
+    <string name="delete_all">حذف الكل</string>
+    <string name="delete_all_trash_msg">سيتم حذف هذه الرسائل نهائياً ولا يمكن استرجاعها.</string>
+    <string name="auto_resend">إعادة إرسال الرسائل الفاشلة تلقائياً</string>
+    <string name="attach_draw">رسم</string>
+    <string name="draw_clear">مسح</string>
+    <string name="draw_done">تم</string>
 </resources>

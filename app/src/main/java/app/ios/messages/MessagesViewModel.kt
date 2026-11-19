@@ -56,6 +56,21 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun purgeAllTrash() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try { app.ios.messages.data.TrashStore.purgeAll(getApplication<Application>()) } catch (_: Exception) { }
+            loadTrash()
+        }
+    }
+
+    fun restoreAllTrash() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try { app.ios.messages.data.TrashStore.restoreAll(getApplication<Application>()) } catch (_: Exception) { }
+            loadTrash()
+            refresh()
+        }
+    }
+
     private val _muted = MutableStateFlow(prefs.muted)
     val muted: StateFlow<Set<Long>> = _muted
 

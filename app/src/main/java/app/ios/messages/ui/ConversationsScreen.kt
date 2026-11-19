@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -93,6 +94,8 @@ fun ConversationsScreen(
     trash: List<app.ios.messages.data.TrashItem> = emptyList(),
     onRestoreTrash: (String) -> Unit = {},
     onPurgeTrash: (String) -> Unit = {},
+    onPurgeAllTrash: () -> Unit = {},
+    onRestoreAllTrash: () -> Unit = {},
     onTogglePin: (Long) -> Unit,
     onToggleMute: (Long) -> Unit,
     onMakeDefault: () -> Unit,
@@ -109,6 +112,7 @@ fun ConversationsScreen(
     var filterMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf<Long?>(null) }
     var trashSel by remember { mutableStateOf<app.ios.messages.data.TrashItem?>(null) }
+    var confirmPurgeAll by remember { mutableStateOf(false) }
     val thud = rememberThud()
     val tick = rememberTick()
     var confirmDelete by remember { mutableStateOf<List<Long>?>(null) }
@@ -123,7 +127,9 @@ fun ConversationsScreen(
                 3 -> c.subId == simFilter
                 else -> true
             }
+            val digits = query.filter { it.isDigit() }
             pass && (query.isBlank() || c.name.contains(query, true) || c.snippet.contains(query, true) ||
+                (digits.length >= 3 && c.address.filter { it.isDigit() }.contains(digits)) ||
                 (nq.isNotEmpty() && app.ios.messages.data.Intel.normalize(c.name).contains(nq)))
         }
     }
@@ -307,6 +313,29 @@ fun ConversationsScreen(
                         )
                     }
                 }
+                if (trash.isNotEmpty()) {
+                    item(key = "trashActions") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                stringResource(R.string.recover_all),
+                                color = p.blue,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable { onRestoreAllTrash() }.padding(vertical = 8.dp)
+                            )
+                            Text(
+                                stringResource(R.string.delete_all),
+                                color = Red,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable { confirmPurgeAll = true }.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
                 items(trash, key = { "t" + it.id }, contentType = { "trash" }) { t ->
                     TrashRow(t) { trashSel = t }
                 }
@@ -323,6 +352,18 @@ fun ConversationsScreen(
                     )
                 }
             }
+        }
+
+        if (confirmPurgeAll) {
+            IosAlert(
+                title = stringResource(R.string.delete_all),
+                message = stringResource(R.string.delete_all_trash_msg),
+                actions = listOf(
+                    AlertAction(stringResource(R.string.delete_permanently), destructive = true, onClick = { confirmPurgeAll = false; onPurgeAllTrash() }),
+                    AlertAction(stringResource(R.string.cancel), bold = true, onClick = { confirmPurgeAll = false })
+                ),
+                onDismiss = { confirmPurgeAll = false }
+            )
         }
 
         trashSel?.let { t ->
