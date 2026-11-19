@@ -17,6 +17,8 @@ class MessagesApp : Application() {
             old?.uncaughtException(t, e)
         }
         app.ios.messages.ui.Perf.cheapBlur = app.ios.messages.data.Prefs(this).smoothMode
+        com.iosuite.core.SuiteBridge.handler = MessagesBridge
+        com.iosuite.core.ContactCache.get(this).watch()
         Thread { Sounds.warmUp(this) }.start()
         app.ios.messages.data.AutoResend.start(this)
     }

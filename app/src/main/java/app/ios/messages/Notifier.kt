@@ -24,6 +24,8 @@ import app.ios.messages.data.Prefs
 import app.ios.messages.data.SimInfo
 import app.ios.messages.data.Sims
 import app.ios.messages.data.SmsRepository
+import com.iosuite.core.SuiteBridge
+import com.iosuite.core.SuiteNotif
 
 /**
  * Notifications are fully owned by Android: the app creates normal channels (messages, verification codes,
@@ -122,13 +124,14 @@ object Notifier {
         }
         // createNotificationChannel on an existing channel only refreshes its name / description,
         // which keeps them in the app language while leaving the user's own sound / vibration choices alone.
+        SuiteNotif.ensureGroup(lc)
         nm.createNotificationChannel(messageChannel(CH_MESSAGES, lc.getString(R.string.messages), lc.getString(R.string.ch_messages_desc), lc))
         nm.createNotificationChannel(messageChannel(CH_CODES, lc.getString(R.string.ch_codes), lc.getString(R.string.ch_codes_desc), lc))
         nm.createNotificationChannel(
-            NotificationChannel(CH_FAILED, lc.getString(R.string.ch_failed), NotificationManager.IMPORTANCE_DEFAULT).apply {
+            SuiteNotif.inGroup(NotificationChannel(CH_FAILED, lc.getString(R.string.ch_failed), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = lc.getString(R.string.ch_failed_desc)
                 setShowBadge(false)
-            }
+            })
         )
         channelsReady = true
         channelsCheckedAt = now
@@ -137,7 +140,7 @@ object Notifier {
 
     /** Starting values only: from then on the user's choice in Android settings wins. */
     private fun messageChannel(id: String, name: String, desc: String, lc: Context): NotificationChannel =
-        NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
+        SuiteNotif.inGroup(NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH)).apply {
             description = desc
             // The system's own default notification tone: it follows whatever tone the user picks in Android settings,
             // and the user can still change sound / vibration / pop-up for this channel there.
@@ -181,6 +184,10 @@ object Notifier {
         // The slow full address-book search runs afterwards and only refreshes the title / photo silently.
         val quick = runCatching { repo.quickName(address) }.getOrNull()
         post(ctx, address, body, subId, tid, quick ?: address, runCatching { repo.cachedPhoto(address) }.getOrNull(), append = true, alert = true)
+        if (MissedState.get(ctx, prefs.key(address)) != null) {
+            // The missed call is now part of this notification: the Phone app drops its own.
+            SuiteBridge.send(ctx, SuiteBridge.PKG_PHONE, SuiteBridge.ACTION_ABSORBED) { putExtra(SuiteBridge.EXTRA_NUMBER, address) }
+        }
         if (quick == null) {
             Work.run {
                 val full = runCatching { repo.contactName(address) }.getOrNull() ?: return@run
@@ -215,6 +222,8 @@ object Notifier {
             while (l.size > MAX_LINES) l.removeAt(0)
             ArrayList(l)
         }
+        // A missed call from the same number (reported by the Phone app) shows up as one more line of the same conversation.
+        val allLines = (lines + MissedState.lines(ctx, key)).sortedBy { it.second }.takeLast(MAX_LINES)
 
         val photoIcon = avatar(ctx, photo)
         val sender = Person.Builder().setName(title).setKey(key).apply { if (photoIcon != null) setIcon(photoIcon) }.build()
@@ -225,19 +234,17 @@ object Notifier {
             if (nowMs - last > SHORTCUT_GAP_MS) { shortcutAt[shortcutId] = nowMs; true } else false
         }
         if (pushShortcut) publishShortcut(ctx, shortcutId, title, sender, photoIcon, address)
-        val me = Person.Builder().setName(lc.getString(R.string.notif_me)).build()
-        val style = Notification.MessagingStyle(me)
-        lines.forEach { (text, time) -> style.addMessage(text, time, sender) }
+        val style = SuiteNotif.messagingStyle(SuiteNotif.me(lc), sender, allLines.map { SuiteNotif.Line(it.first, it.second) })
 
         // What the lock screen shows when the user keeps "hide sensitive content" on in Android settings.
         val public = Notification.Builder(ctx, if (code != null) CH_CODES else CH_MESSAGES)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(SuiteNotif.smallIcon).setColor(SuiteNotif.ACCENT)
             .setContentTitle(lc.getString(R.string.messages))
             .setContentText(lc.getString(R.string.notif_new_message))
             .build()
 
         val b = Notification.Builder(ctx, if (code != null) CH_CODES else CH_MESSAGES)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(SuiteNotif.smallIcon).setColor(SuiteNotif.ACCENT)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(style)
@@ -246,7 +253,7 @@ object Notifier {
             .setCategory(Notification.CATEGORY_MESSAGE)
             .setGroup(GROUP)
             .setAutoCancel(true)
-            .setWhen(lines.last().second)
+            .setWhen(allLines.last().second)
             .setShowWhen(true)
             .setOnlyAlertOnce(!alert)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -383,7 +390,7 @@ object Notifier {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val summary = Notification.Builder(ctx, CH_MESSAGES)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(SuiteNotif.smallIcon).setColor(SuiteNotif.ACCENT)
             .setContentTitle(lc.getString(R.string.messages))
             .setContentText(label)
             .setStyle(Notification.InboxStyle().setSummaryText(label))
@@ -402,7 +409,52 @@ object Notifier {
         posted.remove(nid(address))
     }
 
+    /** Reading (or dismissing) the merged conversation also reads the missed call in the Phone app. */
+    fun acknowledgeMissed(ctx: Context, address: String) {
+        val key = Prefs.keyOf(address)
+        val rec = MissedState.get(ctx, key) ?: return
+        MissedState.clear(ctx, key)
+        SuiteBridge.send(ctx, SuiteBridge.PKG_PHONE, SuiteBridge.ACTION_READ_STATE) {
+            putExtra(SuiteBridge.EXTRA_KIND, SuiteBridge.KIND_MISSED_READ)
+            putExtra(SuiteBridge.EXTRA_NUMBER, rec.number)
+        }
+    }
+
+    /** Phone reported a missed call: if this number already has a notification here, fold the call into it. */
+    fun mergeMissed(ctx: Context, number: String): Boolean {
+        if (!allowed(ctx)) return false
+        val nm = ensureChannels(ctx)
+        seedPosted(nm)
+        if (nid(number) !in posted) return false
+        val repo = SharedRepo.get(ctx)
+        val key = Prefs.keyOf(number)
+        val tid = runCatching { repo.threadIdFor(number) }.getOrNull()
+        post(
+            ctx, number, MissedState.text(ctx, key), -1, tid,
+            runCatching { repo.contactName(number) }.getOrNull() ?: number,
+            runCatching { repo.contactPhoto(number) }.getOrNull(),
+            append = false, alert = true
+        )
+        return true
+    }
+
+    /** Rebuilds an existing conversation notification (e.g. after its missed-call line was cleared in the Phone app). */
+    fun repost(ctx: Context, address: String) {
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        seedPosted(nm)
+        if (nid(address) !in posted) return
+        val repo = SharedRepo.get(ctx)
+        val last = synchronized(history) { history[Prefs.keyOf(address)]?.lastOrNull()?.first }.orEmpty()
+        post(
+            ctx, address, last, -1, runCatching { repo.threadIdFor(address) }.getOrNull(),
+            runCatching { repo.contactName(address) }.getOrNull() ?: address,
+            runCatching { repo.contactPhoto(address) }.getOrNull(),
+            append = false, alert = false
+        )
+    }
+
     fun cancel(ctx: Context, address: String) {
+        acknowledgeMissed(ctx, address)
         forget(address)
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.cancel(nid(address))
@@ -419,6 +471,7 @@ object Notifier {
         readAddresses.forEach { a ->
             val id = nid(a)
             if (posted.remove(id)) {
+                acknowledgeMissed(ctx, a)
                 nm.cancel(id)
                 synchronized(history) { history.remove(Prefs.keyOf(a)) }
                 changed = true
@@ -461,7 +514,7 @@ object Notifier {
         val text = if (other != null) lc.getString(R.string.failed_retry_sim, other.label)
         else lc.getString(R.string.failed_retry)
         val n = Notification.Builder(ctx, CH_FAILED)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(SuiteNotif.smallIcon).setColor(SuiteNotif.ACCENT)
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(open(ctx, address))

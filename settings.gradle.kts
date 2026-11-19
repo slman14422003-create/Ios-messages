@@ -14,3 +14,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "iOS-Messages"
 include(":app")
+include(":core")
+include(":benchmark")

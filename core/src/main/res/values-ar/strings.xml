@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="suite_notif_group">المكالمات والرسائل</string>
+    <string name="suite_me">أنا</string>
+    <string name="suite_missed_one">مكالمة فائتة</string>
+    <string name="suite_missed_many">%1$d مكالمات فائتة</string>
+    <string name="suite_call_back">اتصال</string>
+</resources>

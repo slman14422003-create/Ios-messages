@@ -26,7 +26,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object MmsImages {
-    private val cache = LruCache<String, ImageBitmap>(24)
+    private val cache = object : LruCache<String, ImageBitmap>((Runtime.getRuntime().maxMemory() / 8).toInt().coerceIn(8 shl 20, 64 shl 20)) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+    }
 
     fun cached(key: String): ImageBitmap? = cache.get(key)
 

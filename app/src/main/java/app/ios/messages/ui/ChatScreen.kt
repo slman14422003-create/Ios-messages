@@ -1,5 +1,7 @@
 package app.ios.messages.ui
 
+import com.iosuite.core.heroAnchor as com_heroAnchor
+import com.iosuite.core.heroTarget as com_heroTarget
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.expandVertically
 import androidx.compose.ui.focus.onFocusChanged
@@ -235,6 +237,8 @@ private fun ChatScreenBody(
     val clipboard = LocalClipboardManager.current
     val density = LocalDensity.current
     val address = target.address.orEmpty()
+    val heroAvatar = com.iosuite.core.rememberHeroAnchor()
+    val heroName = com.iosuite.core.rememberHeroAnchor()
     var menu by remember { mutableStateOf(false) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -450,14 +454,23 @@ private fun ChatScreenBody(
                         Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 8.dp),
                         onClick = { kbc?.hide(); onBack() }
                     ) { ChevronLeft(p.blue, Modifier.padding(end = 2.dp)) }
-                    if (menu) ContactSheet(name, address, target.photo, { searchOpen = true; searchQuery = ""; searchPos = 0 }, chatTheme, onChatTheme) { menu = false }
+                    if (menu) ContactSheet(
+                        name, address, target.photo, { searchOpen = true; searchQuery = ""; searchPos = 0 }, chatTheme, onChatTheme,
+                        hero = { com.iosuite.core.heroOf(name, target.photo, heroAvatar, heroName) }
+                    ) { menu = false }
                     Column(
                         Modifier
                             .align(Alignment.TopCenter)
                             .padding(top = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(Modifier.clip(CircleShape).plainClickable { menu = true }) {
+                        Box(
+                            Modifier
+                                .clip(CircleShape)
+                                .com_heroAnchor(heroAvatar)
+                                .com_heroTarget(false)
+                                .plainClickable { menu = true }
+                        ) {
                             Avatar(name, 62.dp, target.photo, tint = HeaderAvatarTint)
                         }
                         Spacer(Modifier.height(6.dp))
@@ -473,7 +486,10 @@ private fun ChatScreenBody(
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 200.dp)
+                                    modifier = Modifier
+                                        .widthIn(max = 200.dp)
+                                        .com_heroAnchor(heroName)
+                                        .com_heroTarget(true)
                                 )
                                 Spacer(Modifier.width(5.dp))
                                 ChevronRight(p.tertiary, width = 6, height = 11, stroke = 1.8f)
@@ -676,7 +692,7 @@ private fun TimeHeader(t: ChatItem.Time) {
     }
 }
 
-private val HeaderAvatarTint = Pair(Color(0xFF9DAAE6), Color(0xFF727BBE))
+internal val HeaderAvatarTint = Pair(Color(0xFF9DAAE6), Color(0xFF727BBE))
 
 @Composable
 private fun BubbleContent(
@@ -1184,6 +1200,7 @@ private fun ContactSheet(
     onSearch: () -> Unit,
     chatTheme: String,
     onChatTheme: (String) -> Unit,
+    hero: () -> com.iosuite.core.Hero? = { null },
     onDismiss: () -> Unit
 ) {
     val p = LocalPalette.current
@@ -1235,11 +1252,12 @@ private fun ContactSheet(
                 Modifier.weight(1f),
                 { ContactIcon(p.blue) }
             ) {
+                val flight = hero()
                 onDismiss()
                 runCatching {
                     if (app.ios.messages.ContactsLink.installed(ctx)) {
-                        if (contactUri != null) app.ios.messages.ContactsLink.view(ctx, contactUri)
-                        else app.ios.messages.ContactsLink.create(ctx, address)
+                        if (contactUri != null) app.ios.messages.ContactsLink.view(ctx, contactUri, flight)
+                        else app.ios.messages.ContactsLink.create(ctx, address, flight)
                     } else if (contactUri != null) {
                         ctx.startActivity(Intent(Intent.ACTION_VIEW, contactUri))
                     } else {

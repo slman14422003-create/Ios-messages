@@ -206,7 +206,9 @@ private fun initialsOf(name: String): String =
 object PhotoCache {
     var generation by androidx.compose.runtime.mutableIntStateOf(0)
         private set
-    private val cache = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(96) {}
+    private val cache = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>((Runtime.getRuntime().maxMemory() / 16).toInt().coerceIn(4 shl 20, 32 shl 20)) {
+        override fun sizeOf(key: String, value: androidx.compose.ui.graphics.ImageBitmap): Int = value.width * value.height * 4
+    }
 
     fun invalidate() {
         cache.evictAll()

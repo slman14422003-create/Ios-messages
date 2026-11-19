@@ -285,7 +285,10 @@ class NotificationDismissedReceiver : BroadcastReceiver() {
     }
 
     private fun handle(context: Context, intent: Intent) {
-        intent.getStringExtra("address")?.let { Notifier.forget(it) }
+        intent.getStringExtra("address")?.let {
+            Notifier.acknowledgeMissed(context, it)
+            Notifier.forget(it)
+        }
     }
 }
 

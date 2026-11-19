@@ -19,6 +19,7 @@ android {
         // certificate it is actually signed with; a re-signed / re-packaged copy locks itself.
         // If you ever change release.jks, update this value (keytool -list -v -keystore release.jks).
         buildConfigField("String", "CERT_SHA256", "\"C16DDD8ADAFDEC27F547A8126F22183F2E1D1E3E76439DCABCB2A71B96EF938A\"")
+        buildConfigField("boolean", "BENCH", "false")
     }
 
     signingConfigs {
@@ -40,6 +41,15 @@ android {
         }
         debug {
             signingConfig = signingConfigs.getByName("release")
+        }
+        // Built only for :benchmark (Macrobenchmark). Same code as release, signed with the release key,
+        // plus a flag that lets the benchmark seed a synthetic list.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("release")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
+            buildConfigField("boolean", "BENCH", "true")
         }
     }
     compileOptions {
@@ -66,8 +76,10 @@ composeCompiler {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation(project(":core"))
+    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Explicit, sender-verified bridge between the Phone, Messages and Contacts apps. -->
+        <receiver
+            android:name="com.iosuite.core.SuiteReceiver"
+            android:exported="true" />
+    </application>
+</manifest>

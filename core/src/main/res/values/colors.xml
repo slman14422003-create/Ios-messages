@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ios_window_light">#FFFFFFFF</color>
+    <color name="ios_window_dark">#FF000000</color>
+    <color name="ios_window_bg">@color/ios_window_light</color>
+    <color name="ios_suite_accent">#FF007AFF</color>
+</resources>

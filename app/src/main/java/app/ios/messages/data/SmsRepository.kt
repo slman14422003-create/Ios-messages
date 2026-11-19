@@ -19,11 +19,7 @@ class SmsRepository(private val ctx: Context) {
     private val cr get() = ctx.contentResolver
     private val attachmentLabel: String by lazy { app.ios.messages.Lang.wrap(ctx).getString(app.ios.messages.R.string.snippet_attachment) }
     private val smsUri: Uri = Uri.parse("content://sms")
-    private class CInfo(val name: String?, val photo: String?, val at: Long)
-
-    /** address -> contact info. Entries expire, so an edit made in any contacts app shows up even without a change event. */
-    private val nameCache = HashMap<String, CInfo>()
-    private var phoneIndex: Map<String, CInfo>? = null
+    private val contactCache get() = com.iosuite.core.ContactCache.get(ctx)
 
     private fun has(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
@@ -35,81 +31,22 @@ class SmsRepository(private val ctx: Context) {
         }.getOrDefault(false)
         return role || Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
     }
-    fun clearCache() = synchronized(nameCache) { nameCache.clear(); phoneIndex = null }
-
-    private fun fresh(i: CInfo, now: Long) = now - i.at < (if (i.name != null) HIT_TTL else MISS_TTL)
+    /** Delta-syncs the shared contact cache (only contacts changed since the last sync are re-read). */
+    fun clearCache() {
+        contactCache.sync()
+    }
 
     /** Cache-only lookup: safe on the main thread. Returns null when the name is unknown or not loaded yet. */
-    fun cachedName(address: String): String? = synchronized(nameCache) {
-        nameCache[address]?.takeIf { fresh(it, System.currentTimeMillis()) }?.name
-    }
+    fun cachedName(address: String): String? = contactCache.peek(address)?.name
 
-    fun cachedPhoto(address: String): String? = synchronized(nameCache) {
-        nameCache[address]?.takeIf { fresh(it, System.currentTimeMillis()) }?.photo
-    }
+    fun cachedPhoto(address: String): String? = contactCache.peek(address)?.thumb
 
-    fun contactName(address: String): String? = info(address, true).name
+    fun contactName(address: String): String? = if (has(Manifest.permission.READ_CONTACTS)) contactCache.find(address)?.name else null
 
-    fun contactPhoto(address: String): String? = info(address, true).photo
-
-    /**
-     * Looks the number up through the system PhoneLookup (works with Google, Samsung, Xiaomi and any other
-     * contacts app, because they all write to the same Contacts Provider). When the provider cannot match the
-     * number (different country format, spaces, a leading 0), the last 9 digits are compared against the
-     * address book as a second chance. [useIndex] = false keeps it to one quick query (main-thread safe).
-     */
-    private fun info(address: String, useIndex: Boolean): CInfo {
-        val now = System.currentTimeMillis()
-        synchronized(nameCache) {
-            nameCache[address]?.let { if (fresh(it, now)) return it }
-        }
-        var name: String? = null
-        var photo: String? = null
-        if (has(Manifest.permission.READ_CONTACTS) && address.any { it.isDigit() }) {
-            try {
-                val uri = Uri.withAppendedPath(
-                    ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(address)
-                )
-                cr.query(
-                    uri,
-                    arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.PHOTO_THUMBNAIL_URI),
-                    null, null, null
-                )?.use {
-                    if (it.moveToFirst()) {
-                        name = it.getString(0)
-                        photo = it.getString(1)
-                    }
-                }
-            } catch (_: Exception) {
-            }
-            if (name == null && useIndex) {
-                val hit = index()[Prefs.keyOf(address)]
-                if (hit != null) {
-                    name = hit.name
-                    photo = hit.photo
-                }
-            }
-        }
-        val out = CInfo(name?.takeIf { it.isNotBlank() }, photo, now)
-        // A miss found without the fallback index is not remembered: the full lookup may still find it.
-        if (out.name != null || useIndex) synchronized(nameCache) { nameCache[address] = out }
-        return out
-    }
-
-    private fun index(): Map<String, CInfo> {
-        synchronized(nameCache) { phoneIndex?.let { return it } }
-        val m = HashMap<String, CInfo>()
-        val now = System.currentTimeMillis()
-        for (c in contacts()) {
-            val d = c.number.filter { it.isDigit() }
-            if (d.length >= 7) m.putIfAbsent(d.takeLast(9), CInfo(c.name, c.photo, now))
-        }
-        synchronized(nameCache) { phoneIndex = m }
-        return m
-    }
+    fun contactPhoto(address: String): String? = if (has(Manifest.permission.READ_CONTACTS)) contactCache.find(address)?.thumb else null
 
     /** Main-thread friendly: cache hit, else one indexed query. */
-    fun quickName(address: String): String? = info(address, false).name
+    fun quickName(address: String): String? = contactName(address)
 
     /** Cheap fingerprint of the address book (newest change + size). Differs after any add / edit / delete. */
     fun contactsStamp(): String {
@@ -490,8 +427,6 @@ class SmsRepository(private val ctx: Context) {
     }
 
     companion object {
-        private const val HIT_TTL = 10 * 60_000L
-        private const val MISS_TTL = 60_000L
         const val TYPE_INBOX = 1
         const val TYPE_SENT = 2
         const val TYPE_OUTBOX = 4

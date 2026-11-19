@@ -8,3 +8,5 @@ HSPLandroidx/compose/foundation/**;->**(**)**
 HSPLandroidx/compose/animation/**;->**(**)**
 HSPLandroidx/compose/material3/**;->**(**)**
 HSPLandroidx/lifecycle/**;->**(**)**
+HSPLcom/iosuite/core/**->**(**)**
+Lcom/iosuite/core/**;

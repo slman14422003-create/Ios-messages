@@ -87,6 +87,28 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations
 
+    /** True once the first load of the conversation list finished (the splash screen waits for it). */
+    private val _ready = MutableStateFlow(false)
+    val ready: StateFlow<Boolean> = _ready
+
+    @Volatile private var benchSeeded = false
+
+    /** Macrobenchmark only: a synthetic list that no later refresh overwrites. */
+    fun seedBenchmark(n: Int) {
+        benchSeeded = true
+        val now = System.currentTimeMillis()
+        _conversations.value = List(n) { i ->
+            Conversation(
+                i + 1L, "+96655%07d".format(i), "Contact %04d".format(i),
+                "Message preview number $i", now - i * 60_000L, if (i % 7 == 0) 1 else 0
+            )
+        }
+        _hasPermission.value = true
+        _isDefault.value = true
+        _setupDismissed.value = true
+        _ready.value = true
+    }
+
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
 
@@ -146,7 +168,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         app.contentResolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
-        app.contentResolver.registerContentObserver(ContactsContract.AUTHORITY_URI, true, contactsObserver)
+        app.contentResolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, contactsObserver)
         viewModelScope.launch(Dispatchers.IO) {
             Notifier.ensureChannels(app)
             for (r in requests) {
@@ -236,6 +258,7 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun runRefresh() {
+        if (benchSeeded) return
         staleInBackground = false
         val checkContacts = wantContactsCheck
         wantContactsCheck = false
@@ -296,6 +319,8 @@ class MessagesViewModel(app: Application) : AndroidViewModel(app) {
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("Messages", "refresh failed", e)
+            } finally {
+                _ready.value = true
             }
         }
     }

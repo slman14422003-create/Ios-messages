@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="suite_notif_group">Calls &amp; Messages</string>
+    <string name="suite_me">Me</string>
+    <string name="suite_missed_one">Missed call</string>
+    <string name="suite_missed_many">%1$d missed calls</string>
+    <string name="suite_call_back">Call</string>
+</resources>

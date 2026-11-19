@@ -93,10 +93,15 @@ class MainActivity : ComponentActivity() {
     /** True when the integrity check failed: nothing from the message store is touched. */
     private var locked = false
 
+    private val splashGate = com.iosuite.core.SplashGate()
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        splashGate.install(this)
         super.onCreate(savedInstanceState)
+        com.iosuite.core.WindowBg.apply(this, Prefs(this).appearance)
         Transitions.install(this)
         SmoothDisplay.apply(this)
+        com.iosuite.core.Jank.attach(this, "Messages")
         // Block screenshots / screen recording / app-switcher preview, and ignore taps while another
         // app draws over us (tapjacking).
         applyScreenSecure(Prefs(this).screenSecure)
@@ -104,6 +109,7 @@ class MainActivity : ComponentActivity() {
         val verdict = Integrity.verdict(this)
         if (verdict != Integrity.Verdict.OK) {
             locked = true
+            splashGate.release()
             enableEdgeToEdge()
             setContent { LockedScreen(onExit = { finishAffinity() }) }
             return
@@ -114,6 +120,7 @@ class MainActivity : ComponentActivity() {
         val crashFile = java.io.File(filesDir, "crash.txt")
         if (crashFile.exists()) {
             val trace = runCatching { crashFile.readText() }.getOrDefault("")
+            splashGate.release()
             setContent {
                 CrashScreen(
                     trace = trace,
@@ -125,13 +132,22 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             pendingAddress = addressFrom(intent)
             returnToCaller = pendingAddress != null && intent.getBooleanExtra(Transitions.EXTRA_RETURN, false)
+            if (pendingAddress != null) com.iosuite.core.HeroHost.accept(intent)
+        }
+        if (BuildConfig.BENCH) runBenchHooks()
+        lifecycleScope.launch {
+            vm.ready.first { it }
+            splashGate.release()
         }
         setContent {
+            val firstDataReady by vm.ready.collectAsStateWithLifecycle()
+            com.iosuite.core.ReportFullyDrawnWhen(firstDataReady)
             val bubbleCfg by vm.bubble.collectAsStateWithLifecycle()
             val bubbleStyle = remember(bubbleCfg) { bubbleCfg.style() }
             val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
             val dark = when (appearance) { 1 -> false; 2 -> true; else -> sysDark }
             androidx.compose.runtime.DisposableEffect(dark) {
+                com.iosuite.core.WindowBg.applyColor(this@MainActivity, dark)
                 enableEdgeToEdge(
                     statusBarStyle = androidx.activity.SystemBarStyle.auto(
                         android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT
@@ -149,16 +165,19 @@ class MainActivity : ComponentActivity() {
                 )
             ) {
             IMessageTheme(bubble = bubbleStyle, config = bubbleCfg, appearance = appearance) {
-                App(
-                    vm, pendingAddress,
-                    onLanguage = { Prefs(this).language = it; recreate() },
-                    appearance = appearance,
-                    onAppearance = { appearance = it; Prefs(this).appearance = it },
-                    textScale = textScale,
-                    onTextScale = { textScale = it; Prefs(this).textScale = it },
-                    returnToCaller = returnToCaller,
-                    onReturn = { finish() }
-                ) { pendingAddress = null }
+                Box(Modifier.fillMaxSize()) {
+                    App(
+                        vm, pendingAddress,
+                        onLanguage = { Prefs(this@MainActivity).language = it; recreate() },
+                        appearance = appearance,
+                        onAppearance = { appearance = it; Prefs(this@MainActivity).appearance = it },
+                        textScale = textScale,
+                        onTextScale = { textScale = it; Prefs(this@MainActivity).textScale = it },
+                        returnToCaller = returnToCaller,
+                        onReturn = { finish() }
+                    ) { pendingAddress = null }
+                    HeroLayer()
+                }
             }
             }
         }
@@ -169,12 +188,29 @@ class MainActivity : ComponentActivity() {
         addressFrom(intent)?.let {
             pendingAddress = it
             returnToCaller = intent.getBooleanExtra(Transitions.EXTRA_RETURN, false)
+            com.iosuite.core.HeroHost.accept(intent)
         }
     }
 
     override fun onStop() {
         returnToCaller = false
+        com.iosuite.core.WindowBg.persistSplash(this, appearance)
         super.onStop()
+    }
+
+    /** Macrobenchmark only (benchmark build type): seeds a synthetic list and can trigger the hop to the Contacts app. */
+    private fun runBenchHooks() {
+        val items = intent.getIntExtra("bench_items", 0)
+        if (items > 0) vm.seedBenchmark(items)
+        if (intent.getStringExtra("bench_action") == "open_peer") {
+            lifecycleScope.launch {
+                kotlinx.coroutines.delay(900)
+                ContactsLink.create(
+                    this@MainActivity, "5550100",
+                    com.iosuite.core.Hero("Benchmark", null, com.iosuite.core.HeroRect(60, 320, 160, 160), null)
+                )
+            }
+        }
     }
 
     override fun finish() {
@@ -199,6 +235,7 @@ class MainActivity : ComponentActivity() {
         AppState.foreground = true
         requestHighRefresh()
         vm.recheckRole()
+        com.iosuite.core.ContactCache.get(this).syncAsync()
         vm.refresh(checkContacts = true)
     }
 
@@ -264,6 +301,20 @@ class MainActivity : ComponentActivity() {
         if (data.scheme !in listOf("sms", "smsto", "mms", "mmsto")) return null
         return data.schemeSpecificPart?.substringBefore('?')?.takeIf { it.isNotBlank() }
     }
+}
+
+@Composable
+private fun HeroLayer() {
+    val p = app.ios.messages.ui.LocalPalette.current
+    val hero = com.iosuite.core.HeroHost.landing?.hero
+    com.iosuite.core.HeroHost.Overlay(
+        avatar = { sz ->
+            app.ios.messages.ui.Avatar(hero?.name.orEmpty(), sz, hero?.photo, tint = app.ios.messages.ui.HeaderAvatarTint)
+        },
+        name = { n ->
+            Text(n, color = p.label, fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
+        }
+    )
 }
 
 private fun requiredPermissions(): Array<String> = buildList {
