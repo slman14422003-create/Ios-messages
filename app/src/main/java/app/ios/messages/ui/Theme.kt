@@ -103,7 +103,7 @@ fun IMessageTheme(
         MaterialTheme(
             colorScheme = if (dark) darkColorScheme() else lightColorScheme()
         ) {
-            ProvideTextStyle(TextStyle(letterSpacing = (-0.2).sp)) { content() }
+            ProvideTextStyle(TextStyle(letterSpacing = textLs(-0.2f))) { content() }
         }
     }
 }
@@ -113,10 +113,14 @@ object IosType {
     private val base = androidx.compose.ui.text.font.FontFamily.SansSerif
     private val semi = androidx.compose.ui.text.font.FontWeight.SemiBold
     private val normal = androidx.compose.ui.text.font.FontWeight.Normal
-    val largeTitle = TextStyle(fontFamily = base, fontSize = 34.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, letterSpacing = 0.37.sp)
-    val title3 = TextStyle(fontFamily = base, fontSize = 20.sp, fontWeight = normal, letterSpacing = 0.38.sp)
-    val headline = TextStyle(fontFamily = base, fontSize = 17.sp, fontWeight = semi, letterSpacing = (-0.43).sp)
-    val body = TextStyle(fontFamily = base, fontSize = 17.sp, fontWeight = normal, letterSpacing = (-0.43).sp)
-    val callout = TextStyle(fontFamily = base, fontSize = 15.sp, fontWeight = normal, letterSpacing = (-0.2).sp)
-    val footnote = TextStyle(fontFamily = base, fontSize = 13.sp, fontWeight = normal, letterSpacing = (-0.08).sp)
+    val largeTitle get() = TextStyle(fontFamily = base, fontSize = 34.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, letterSpacing = textLs(0.37f))
+    val title3 get() = TextStyle(fontFamily = base, fontSize = 20.sp, fontWeight = normal, letterSpacing = textLs(0.38f))
+    val headline get() = TextStyle(fontFamily = base, fontSize = 17.sp, fontWeight = semi, letterSpacing = textLs(-0.43f))
+    val body get() = TextStyle(fontFamily = base, fontSize = 17.sp, fontWeight = normal, letterSpacing = textLs(-0.43f))
+    val callout get() = TextStyle(fontFamily = base, fontSize = 15.sp, fontWeight = normal, letterSpacing = textLs(-0.2f))
+    val footnote get() = TextStyle(fontFamily = base, fontSize = 13.sp, fontWeight = normal, letterSpacing = textLs(-0.08f))
 }
+
+/** Any letter spacing breaks Arabic joining and makes measured and drawn widths differ (wrapped / clipped words), so Arabic-script UIs get none. */
+internal fun textLs(v: Float): androidx.compose.ui.unit.TextUnit =
+    if (java.util.Locale.getDefault().language in setOf("ar", "fa", "ur", "he", "ps", "ku")) androidx.compose.ui.unit.TextUnit.Unspecified else v.sp
